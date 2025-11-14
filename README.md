@@ -9,6 +9,9 @@ A JIRA account is required You will need to setup a JIRA token to access your se
 
 On the first launch lp-to-jira will assist you in getting your jira API token. JIRA API token can be created here: https://id.atlassian.com/manage-profile/security/api-tokens.
 
+## Features
+- **Milestone Synchronization**: Launchpad milestones are automatically synchronized to JIRA as labels. If a Launchpad bug has milestones assigned to its tasks, those milestone names will be added as labels to the JIRA issue alongside any user-specified labels.
+
 ## Usage:
 ```
 usage: lp-to-jira [-h] [-l LABEL] [-c COMPONENT] [-E EPIC] [-e] [-s SYNC_PROJECT_BUGS] [-d DAYS] [-t TAGS] [--add-link-in-lp-desc ] [--no-lp-tag] [bug] project
