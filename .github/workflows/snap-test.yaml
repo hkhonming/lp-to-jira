@@ -1,0 +1,30 @@
+name: Build Testing Snap
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build snap
+        uses: snapcore/action-build@v1
+        id: build-snap
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: lp-to-jira-snap
+          path: ${{ steps.build-snap.outputs.snap }}
+          retention-days: 30
