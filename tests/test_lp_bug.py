@@ -112,4 +112,14 @@ def test_bug_repr(lp_api):
 
     assert bug.__repr__() == bug_dict.__str__()
 
+
+def test_bug_milestones(lp_api):
+    # Test bug without milestones
+    bug1 = lp_bug(1, lp_api)
+    assert bug1.milestones == set()
+
+    # Test bug with milestones
+    bug7 = lp_bug(7, lp_api)
+    assert bug7.milestones == {'ubuntu-22.04', 'ubuntu-22.10'}
+
 # =============================================================================

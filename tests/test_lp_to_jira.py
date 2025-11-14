@@ -137,4 +137,108 @@ def test_lp_to_jira_bug(lp, empty_bug):
     lp_to_jira_bug(lp, jira, empty_bug, "AA", opts)
 
 
+def test_lp_to_jira_bug_with_milestones():
+    # Test that milestones are extracted and added as labels
+    jira = Mock()
+    jira.search_issues = Mock(return_value=None)
+    jira.create_issue = Mock(return_value=Mock(key="TEST-001"))
+    jira.add_simple_link = Mock(return_value=None)
+    jira.client_info = Mock(return_value="jira")
+
+    # Create a bug with milestones
+    bug = Mock()
+    bug.id = 123
+    bug.title = "Test bug"
+    bug.description = "Test description"
+    bug.tags = []
+    bug.web_link = "https://bugs.launchpad.net/bugs/123"
+    
+    milestone1 = Mock()
+    milestone1.name = "milestone-1"
+    milestone2 = Mock()
+    milestone2.name = "milestone-2"
+    
+    bug.bug_tasks = [
+        Mock(
+            bug_target_name='testpkg (Ubuntu)',
+            milestone=milestone1
+        ),
+        Mock(
+            bug_target_name='testpkg (Ubuntu Focal)',
+            milestone=milestone2
+        )
+    ]
+
+    opts = Mock()
+    opts.label = None
+    opts.component = None
+    opts.epic = None
+    opts.lp_link = False
+    opts.no_lp_tag = True
+
+    lp = Mock()
+    lp_to_jira_bug(lp, jira, bug, "TEST", opts)
+
+    # Verify create_issue was called
+    assert jira.create_issue.called
+    
+    # Get the issue_dict passed to create_issue
+    call_args = jira.create_issue.call_args
+    issue_dict = call_args[1]['fields']
+    
+    # Check that labels include the milestones
+    assert 'labels' in issue_dict
+    assert 'milestone-1' in issue_dict['labels']
+    assert 'milestone-2' in issue_dict['labels']
+
+
+def test_lp_to_jira_bug_with_milestones_and_label():
+    # Test that both user-specified label and milestones are included
+    jira = Mock()
+    jira.search_issues = Mock(return_value=None)
+    jira.create_issue = Mock(return_value=Mock(key="TEST-002"))
+    jira.add_simple_link = Mock(return_value=None)
+    jira.client_info = Mock(return_value="jira")
+
+    # Create a bug with milestones
+    bug = Mock()
+    bug.id = 124
+    bug.title = "Test bug 2"
+    bug.description = "Test description 2"
+    bug.tags = []
+    bug.web_link = "https://bugs.launchpad.net/bugs/124"
+    
+    milestone = Mock()
+    milestone.name = "ubuntu-22.04"
+    
+    bug.bug_tasks = [
+        Mock(
+            bug_target_name='testpkg (Ubuntu)',
+            milestone=milestone
+        )
+    ]
+
+    opts = Mock()
+    opts.label = "my-custom-label"
+    opts.component = None
+    opts.epic = None
+    opts.lp_link = False
+    opts.no_lp_tag = True
+
+    lp = Mock()
+    lp_to_jira_bug(lp, jira, bug, "TEST", opts)
+
+    # Verify create_issue was called
+    assert jira.create_issue.called
+    
+    # Get the issue_dict passed to create_issue
+    call_args = jira.create_issue.call_args
+    issue_dict = call_args[1]['fields']
+    
+    # Check that labels include both the custom label and milestone
+    assert 'labels' in issue_dict
+    assert 'my-custom-label' in issue_dict['labels']
+    assert 'ubuntu-22.04' in issue_dict['labels']
+
+
 # =============================================================================
