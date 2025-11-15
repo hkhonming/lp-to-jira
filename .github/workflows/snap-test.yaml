@@ -23,7 +23,7 @@ jobs:
         id: build-snap
 
       - name: Upload snap artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: lp-to-jira-snap
           path: ${{ steps.build-snap.outputs.snap }}
