@@ -179,9 +179,26 @@ def lp_to_jira_bug(lp, jira, bug, project_id, opts):
         return
 
     issue_dict = build_jira_issue(lp, bug, project_id, opts)
+    
+    # Collect labels: start with user-specified label if provided
+    labels = []
     if opts.label:
-        # Add labels if specified
-        issue_dict["labels"] = [opts.label]
+        labels.append(opts.label)
+    
+    # Extract milestones from bug tasks and add them as labels
+    milestones = set()
+    for task in bug.bug_tasks:
+        if hasattr(task, 'milestone') and task.milestone:
+            milestone_name = task.milestone.name
+            if milestone_name:
+                milestones.add(milestone_name)
+    
+    # Add milestone labels
+    labels.extend(sorted(milestones))
+    
+    # Add all labels to the issue if there are any
+    if labels:
+        issue_dict["labels"] = labels
 
     jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
 

@@ -34,10 +34,17 @@ class lp_bug():
         self.title = bug.title
         self.description = bug.description
         self.heat = bug.heat
+        self.milestones = set()
 
         self.packages_info = {}
         for task in bug.bug_tasks:
             package_name = ""
+
+            # Extract milestone if present
+            if hasattr(task, 'milestone') and task.milestone:
+                milestone_name = task.milestone.name
+                if milestone_name:
+                    self.milestones.add(milestone_name)
 
             task_name = task.bug_target_name
             if " (Ubuntu" in task_name:

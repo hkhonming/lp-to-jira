@@ -12,7 +12,7 @@ def lp_api():
     bug1.heat = "100"
     bug1.importance = "Undecided"
     bug1.bug_tasks = [
-        Mock(bug_target_name=n, status=s)
+        Mock(bug_target_name=n, status=s, milestone=None)
         for n, s in zip(['systemd (Ubuntu)',
                          'vim (Debian)',
                          'glibc (Ubuntu)'],
@@ -27,7 +27,7 @@ def lp_api():
     bug2.heat = "200"
     bug2.importance = "Undecided"
     bug2.bug_tasks = [
-        Mock(bug_target_name=s)
+        Mock(bug_target_name=s, milestone=None)
         for s in [
             'systemd (Ubuntu)',
             'systemd (Ubuntu Focal)',
@@ -41,7 +41,7 @@ def lp_api():
     bug3.heat = "300"
     bug3.importance = "Undecided"
     bug3.bug_tasks = [
-        Mock(bug_target_name=n, status=s)
+        Mock(bug_target_name=n, status=s, milestone=None)
         for n, s in zip(
             ['systemd (Ubuntu)',
              'systemd (Ubuntu Focal)',
@@ -70,7 +70,7 @@ def lp_api():
     bug4.heat = "350"
     bug4.importance = "Undecided"
     bug4.bug_tasks = [
-        Mock(bug_target_name=n, status=s)
+        Mock(bug_target_name=n, status=s, milestone=None)
         for n, s in zip(
             ['casper (Ubuntu)',
              'casper (Ubuntu '+ubuntu_devel+')'],
@@ -88,7 +88,32 @@ def lp_api():
     bug6.bug_tasks = [Mock(
             bug_target_name='systemd (Ubuntu)',
             status='New',
-            importance='Critical')]
+            importance='Critical',
+            milestone=None)]
+
+    # Bug with milestones
+    bug7 = Mock()
+    bug7.title = "Bug with milestones"
+    bug7.description = "A bug with milestone information"
+    bug7.heat = "150"
+    milestone1 = Mock()
+    milestone1.name = 'ubuntu-22.04'
+    milestone2 = Mock()
+    milestone2.name = 'ubuntu-22.10'
+    bug7.bug_tasks = [
+        Mock(
+            bug_target_name='systemd (Ubuntu)',
+            status='New',
+            importance='High',
+            milestone=milestone1
+        ),
+        Mock(
+            bug_target_name='systemd (Ubuntu Focal)',
+            status='Triaged',
+            importance='High',
+            milestone=milestone2
+        )
+    ]
 
     return Mock(bugs={
             1: bug1,
@@ -96,7 +121,8 @@ def lp_api():
             3: bug3,
             4: bug4,
             5: bug5,
-            6: bug6
+            6: bug6,
+            7: bug7
                 })
 
 
@@ -119,7 +145,7 @@ def lp():
     bug.title = "test bug"
     bug.id = 123456
     bug.bug_tasks = [
-        Mock(bug_target_name=n, status=s)
+        Mock(bug_target_name=n, status=s, milestone=None)
         for n, s in zip(['systemd (Ubuntu)',
                          'vim (Debian)',
                          'glibc (Ubuntu)'],
