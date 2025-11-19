@@ -338,8 +338,9 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
         update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.dry_run)
-        # Sync milestone to JIRA version
-        sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run)
+        # Sync milestone to JIRA version if enabled
+        if opts.sync_milestone:
+            sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run)
         return
 
     sync_to_jira = False
@@ -363,14 +364,16 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     if opts.dry_run:
         print("(dry-run) Creating JIRA issue {}".format(issue_dict))
-        # Check for milestone in dry-run mode
-        milestone_name = get_lp_bug_milestone(bug)
-        if milestone_name:
-            print(f"(dry-run) Would sync milestone '{milestone_name}' to JIRA")
+        # Check for milestone in dry-run mode if enabled
+        if opts.sync_milestone:
+            milestone_name = get_lp_bug_milestone(bug)
+            if milestone_name:
+                print(f"(dry-run) Would sync milestone '{milestone_name}' to JIRA")
     else:
         jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
-        # Sync milestone to JIRA version
-        sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run)
+        # Sync milestone to JIRA version if enabled
+        if opts.sync_milestone:
+            sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run)
 
     if opts.lp_link:
        if opts.dry_run:
@@ -402,6 +405,7 @@ def main(args=None):
             lp-to-jira -s ubuntu -t go-to-jira PR
             lp-to-jira -s ubuntu -t go-to-jira -t also-to-jira PR
             lp-to-jira -s ubuntu -t=-ignore-these PR
+            lp-to-jira --sync-milestone 3215487 FR
         ''')
     )
     opt_parser.add_argument(
@@ -497,6 +501,13 @@ def main(args=None):
             dest='config',
             type=argparse.FileType('r'),
             help='JSON configuration file')
+    opt_parser.add_argument(
+        '--sync-milestone',
+        dest='sync_milestone',
+        action='store_true',
+        default=False,
+        help='Sync Launchpad milestones to JIRA fix versions'
+    )
 
     opts = opt_parser.parse_args(args)
 

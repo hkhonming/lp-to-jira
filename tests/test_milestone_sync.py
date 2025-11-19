@@ -4,7 +4,8 @@ from unittest.mock import Mock, patch
 from LpToJira.lp_to_jira import (
     get_lp_bug_milestone,
     ensure_jira_version,
-    sync_milestone_to_jira
+    sync_milestone_to_jira,
+    lp_to_jira_bug
 )
 
 
@@ -246,3 +247,106 @@ def test_sync_milestone_to_jira_add_to_existing():
     assert len(fix_versions) == 2
     assert fix_versions[0] == existing_version
     assert fix_versions[1] == {'name': 'ubuntu-22.04'}
+
+
+def test_lp_to_jira_bug_milestone_disabled_by_default():
+    """Test that milestone sync is disabled by default"""
+    lp = Mock()
+    jira = Mock()
+    
+    # Setup bug with milestone
+    bug = Mock()
+    bug.id = 123456
+    milestone = Mock()
+    milestone.name = "ubuntu-22.04"
+    task = Mock()
+    task.milestone = milestone
+    task.bug_target_name = "systemd (Ubuntu)"
+    bug.bug_tasks = [task]
+    bug.tags = []
+    bug.web_link = "https://example.com"
+    bug.title = "Test Bug"
+    bug.description = "Test Description"
+    
+    # Mock JIRA search to return no existing issue
+    jira.search_issues = Mock(return_value=None)
+    jira.create_issue = Mock(return_value=Mock(key="TEST-123", id="123"))
+    jira.add_simple_link = Mock()
+    jira.client_info = Mock(return_value="https://jira.example.com")
+    
+    # Create opts with sync_milestone disabled
+    opts = Mock()
+    opts.dry_run = False
+    opts.label = None
+    opts.no_lp_tag = True
+    opts.lp_link = False
+    opts.sync_milestone = False  # Disabled by default
+    opts.user_map = {}
+    opts.status_map = {}
+    opts.epic = None
+    
+    sync = {'jira_project': 'TEST'}
+    
+    # Call lp_to_jira_bug
+    lp_to_jira_bug(lp, jira, bug, sync, opts)
+    
+    # Verify that issue was created
+    jira.create_issue.assert_called_once()
+    # Verify that get_project_version_by_name was not called (milestone sync didn't run)
+    if hasattr(jira, 'get_project_version_by_name'):
+        assert not jira.get_project_version_by_name.called
+
+
+def test_lp_to_jira_bug_milestone_enabled():
+    """Test that milestone sync works when enabled"""
+    lp = Mock()
+    jira = Mock()
+    
+    # Setup bug with milestone
+    bug = Mock()
+    bug.id = 123456
+    milestone = Mock()
+    milestone.name = "ubuntu-22.04"
+    task = Mock()
+    task.milestone = milestone
+    task.bug_target_name = "systemd (Ubuntu)"
+    bug.bug_tasks = [task]
+    bug.tags = []
+    bug.web_link = "https://example.com"
+    bug.title = "Test Bug"
+    bug.description = "Test Description"
+    
+    # Mock JIRA search to return no existing issue
+    jira.search_issues = Mock(return_value=None)
+    jira_issue = Mock(key="TEST-123", id="123")
+    jira_issue.fields = Mock()
+    jira_issue.fields.fixVersions = []
+    jira.create_issue = Mock(return_value=jira_issue)
+    jira.add_simple_link = Mock()
+    jira.client_info = Mock(return_value="https://jira.example.com")
+    
+    # Mock version creation
+    jira_version = Mock()
+    jira_version.name = "ubuntu-22.04"
+    jira.get_project_version_by_name = Mock(return_value=jira_version)
+    
+    # Create opts with sync_milestone enabled
+    opts = Mock()
+    opts.dry_run = False
+    opts.label = None
+    opts.no_lp_tag = True
+    opts.lp_link = False
+    opts.sync_milestone = True  # Enabled
+    opts.user_map = {}
+    opts.status_map = {}
+    opts.epic = None
+    
+    sync = {'jira_project': 'TEST'}
+    
+    # Call lp_to_jira_bug
+    lp_to_jira_bug(lp, jira, bug, sync, opts)
+    
+    # Verify that milestone sync ran (version was checked)
+    jira.get_project_version_by_name.assert_called_once_with('TEST', 'ubuntu-22.04')
+    # Verify issue was updated with milestone
+    jira_issue.update.assert_called_once()
