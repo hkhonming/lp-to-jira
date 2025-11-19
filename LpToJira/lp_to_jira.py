@@ -198,6 +198,91 @@ def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, dry_ru
                     issue.update(fields=fields)
 
 
+def get_lp_bug_milestone(bug):
+    """
+    Extract milestone from a Launchpad bug.
+    Returns the milestone name if found, None otherwise.
+    """
+    milestone = None
+    
+    # Check bug tasks for milestone information
+    for task in bug.bug_tasks:
+        if hasattr(task, 'milestone') and task.milestone:
+            # Get milestone name
+            milestone = task.milestone.name
+            break
+    
+    return milestone
+
+
+def ensure_jira_version(jira, project_id, version_name, dry_run=False):
+    """
+    Ensure a JIRA version/release exists in the project.
+    Creates it if it doesn't exist.
+    Returns the version object or None.
+    """
+    if not version_name:
+        return None
+    
+    try:
+        # Check if version already exists
+        existing_version = jira.get_project_version_by_name(project_id, version_name)
+        if existing_version:
+            return existing_version
+    except Exception:
+        # Version doesn't exist, we'll create it
+        pass
+    
+    # Create the version if it doesn't exist
+    if dry_run:
+        print(f"(dry-run) Would create JIRA version '{version_name}' in project {project_id}")
+        return None
+    else:
+        try:
+            new_version = jira.create_version(
+                name=version_name,
+                project=project_id,
+                description=f"Synced from Launchpad milestone: {version_name}"
+            )
+            print(f"Created JIRA version '{version_name}' in project {project_id}")
+            return new_version
+        except Exception as e:
+            print(f"Failed to create JIRA version '{version_name}': {e}")
+            return None
+
+
+def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False):
+    """
+    Sync Launchpad milestone to JIRA fixVersion.
+    Creates the version in JIRA if it doesn't exist.
+    """
+    milestone_name = get_lp_bug_milestone(bug)
+    
+    if not milestone_name:
+        # No milestone to sync
+        return
+    
+    # Ensure the version exists in JIRA
+    jira_version = ensure_jira_version(jira, project_id, milestone_name, dry_run)
+    
+    if jira_version and not dry_run:
+        try:
+            # Get current fix versions
+            current_versions = issue.fields.fixVersions if hasattr(issue.fields, 'fixVersions') else []
+            current_version_names = [v.name for v in current_versions]
+            
+            # Only update if the milestone is not already in fixVersions
+            if milestone_name not in current_version_names:
+                # Add the new version to fixVersions
+                new_versions = current_versions + [{'name': milestone_name}]
+                issue.update(fields={'fixVersions': new_versions})
+                print(f"Updated {issue.key} with milestone '{milestone_name}'")
+        except Exception as e:
+            print(f"Failed to update {issue.key} with milestone '{milestone_name}': {e}")
+    elif dry_run and milestone_name:
+        print(f"(dry-run) Would update {issue.key} with milestone '{milestone_name}'")
+
+
 def build_jira_issue(lp, bug, project_id, issue_type, assignee, component, opts=None):
     """Builds and return a dict to create a Jira Issue from"""
 
@@ -253,6 +338,9 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
         update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.dry_run)
+        # Sync milestone to JIRA version if enabled
+        if opts.sync_milestone:
+            sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run)
         return
 
     sync_to_jira = False
@@ -276,8 +364,16 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     if opts.dry_run:
         print("(dry-run) Creating JIRA issue {}".format(issue_dict))
+        # Check for milestone in dry-run mode if enabled
+        if opts.sync_milestone:
+            milestone_name = get_lp_bug_milestone(bug)
+            if milestone_name:
+                print(f"(dry-run) Would sync milestone '{milestone_name}' to JIRA")
     else:
         jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
+        # Sync milestone to JIRA version if enabled
+        if opts.sync_milestone:
+            sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run)
 
     if opts.lp_link:
        if opts.dry_run:
@@ -309,6 +405,7 @@ def main(args=None):
             lp-to-jira -s ubuntu -t go-to-jira PR
             lp-to-jira -s ubuntu -t go-to-jira -t also-to-jira PR
             lp-to-jira -s ubuntu -t=-ignore-these PR
+            lp-to-jira --sync-milestone 3215487 FR
         ''')
     )
     opt_parser.add_argument(
@@ -404,6 +501,13 @@ def main(args=None):
             dest='config',
             type=argparse.FileType('r'),
             help='JSON configuration file')
+    opt_parser.add_argument(
+        '--sync-milestone',
+        dest='sync_milestone',
+        action='store_true',
+        default=False,
+        help='Sync Launchpad milestones to JIRA fix versions'
+    )
 
     opts = opt_parser.parse_args(args)
 
