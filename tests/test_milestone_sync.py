@@ -245,7 +245,8 @@ def test_sync_milestone_to_jira_add_to_existing():
     call_args = issue.update.call_args
     fix_versions = call_args.kwargs['fields']['fixVersions']
     assert len(fix_versions) == 2
-    assert fix_versions[0] == existing_version
+    # Both versions should be dictionaries for proper JSON serialization
+    assert fix_versions[0] == {'name': 'ubuntu-20.04'}
     assert fix_versions[1] == {'name': 'ubuntu-22.04'}
 
 

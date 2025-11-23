@@ -271,10 +271,17 @@ def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False):
             current_versions = issue.fields.fixVersions if hasattr(issue.fields, 'fixVersions') else []
             current_version_names = [v.name for v in current_versions]
             
+            # Debug: print current_versions to trace JSON serialization issue
+            print(f"DEBUG: current_versions = {current_versions}")
+            print(f"DEBUG: current_versions type = {type(current_versions)}")
+            if current_versions:
+                print(f"DEBUG: first version type = {type(current_versions[0])}")
+            
             # Only update if the milestone is not already in fixVersions
             if milestone_name not in current_version_names:
+                # Convert existing version objects to dictionaries for JSON serialization
                 # Add the new version to fixVersions
-                new_versions = current_versions + [{'name': milestone_name}]
+                new_versions = [{'name': v.name} for v in current_versions] + [{'name': milestone_name}]
                 issue.update(fields={'fixVersions': new_versions})
                 print(f"Updated {issue.key} with milestone '{milestone_name}'")
         except Exception as e:
