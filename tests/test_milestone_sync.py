@@ -351,3 +351,70 @@ def test_lp_to_jira_bug_milestone_enabled():
     jira.get_project_version_by_name.assert_called_once_with('TEST', 'ubuntu-22.04')
     # Verify issue was updated with milestone
     jira_issue.update.assert_called_once()
+
+
+def test_sync_milestone_debug_disabled_by_default(capsys):
+    """Test that debug messages are not shown by default"""
+    jira = Mock()
+    
+    # Setup bug with milestone
+    bug = Mock()
+    milestone = Mock()
+    milestone.name = "ubuntu-22.04"
+    task = Mock()
+    task.milestone = milestone
+    bug.bug_tasks = [task]
+    
+    # Setup JIRA version
+    jira_version = Mock()
+    jira_version.name = "ubuntu-22.04"
+    jira.get_project_version_by_name = Mock(return_value=jira_version)
+    
+    # Setup issue without the milestone
+    issue = Mock()
+    issue.key = "TEST-123"
+    issue.fields = Mock()
+    issue.fields.fixVersions = []
+    
+    # Call without debug flag (default)
+    sync_milestone_to_jira(jira, bug, issue, "TEST")
+    
+    # Capture output
+    captured = capsys.readouterr()
+    
+    # Verify no DEBUG messages in output
+    assert "DEBUG:" not in captured.out
+
+
+def test_sync_milestone_debug_enabled(capsys):
+    """Test that debug messages are shown when debug flag is enabled"""
+    jira = Mock()
+    
+    # Setup bug with milestone
+    bug = Mock()
+    milestone = Mock()
+    milestone.name = "ubuntu-22.04"
+    task = Mock()
+    task.milestone = milestone
+    bug.bug_tasks = [task]
+    
+    # Setup JIRA version
+    jira_version = Mock()
+    jira_version.name = "ubuntu-22.04"
+    jira.get_project_version_by_name = Mock(return_value=jira_version)
+    
+    # Setup issue without the milestone
+    issue = Mock()
+    issue.key = "TEST-123"
+    issue.fields = Mock()
+    issue.fields.fixVersions = []
+    
+    # Call with debug flag enabled
+    sync_milestone_to_jira(jira, bug, issue, "TEST", debug=True)
+    
+    # Capture output
+    captured = capsys.readouterr()
+    
+    # Verify DEBUG messages are in output
+    assert "DEBUG: current_versions = []" in captured.out
+    assert "DEBUG: current_versions type = <class 'list'>" in captured.out
