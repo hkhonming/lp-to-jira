@@ -251,7 +251,7 @@ def ensure_jira_version(jira, project_id, version_name, dry_run=False):
             return None
 
 
-def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False):
+def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False, debug=False):
     """
     Sync Launchpad milestone to JIRA fixVersion.
     Creates the version in JIRA if it doesn't exist.
@@ -272,10 +272,11 @@ def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False):
             current_version_names = [v.name for v in current_versions]
             
             # Debug: print current_versions to trace JSON serialization issue
-            print(f"DEBUG: current_versions = {current_versions}")
-            print(f"DEBUG: current_versions type = {type(current_versions)}")
-            if current_versions:
-                print(f"DEBUG: first version type = {type(current_versions[0])}")
+            if debug:
+                print(f"DEBUG: current_versions = {current_versions}")
+                print(f"DEBUG: current_versions type = {type(current_versions)}")
+                if current_versions:
+                    print(f"DEBUG: first version type = {type(current_versions[0])}")
             
             # Only update if the milestone is not already in fixVersions
             if milestone_name not in current_version_names:
@@ -347,7 +348,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.dry_run)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
-            sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run)
+            sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
         return
 
     sync_to_jira = False
@@ -380,7 +381,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
-            sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run)
+            sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run, opts.debug)
 
     if opts.lp_link:
        if opts.dry_run:
@@ -514,6 +515,13 @@ def main(args=None):
         action='store_true',
         default=False,
         help='Sync Launchpad milestones to JIRA fix versions'
+    )
+    opt_parser.add_argument(
+        '--debug',
+        dest='debug',
+        action='store_true',
+        default=False,
+        help='Enable debug output messages'
     )
 
     opts = opt_parser.parse_args(args)

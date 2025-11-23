@@ -1,7 +1,7 @@
 title: LaunchPad to Jira Bug Importer
 name: lp-to-jira
 base: core24
-version: '0.9'
+version: '0.10'
 summary: Command Line Interface to import Launchpad content into JIRA
 description: |
   lp-to-jira allows you to import bug from a launchpad project into a JIRA
