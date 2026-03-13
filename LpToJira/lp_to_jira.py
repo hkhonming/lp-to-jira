@@ -53,6 +53,13 @@ def get_lp_bug(lp, bug_number):
     return bug
 
 
+def get_lp_bug_importance(bug):
+    """Return the importance of the first bug task, or None if unavailable"""
+    for task in bug.bug_tasks:
+        return task.importance
+    return None
+
+
 def get_lp_bug_pkg(bug):
     """
     From a LP bug, get its package
@@ -173,7 +180,7 @@ def get_first_matching_assignee(bug, assignees):
 
 
 
-def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, dry_run=False):
+def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, priority_map=None, dry_run=False):
     """Update Jira status fields from Launchpad Bug"""
 
     assignee, status = get_first_matching_assignee(bug, assignees)
@@ -196,6 +203,18 @@ def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, dry_ru
                 elif meta == "assignee":
                     fields = {"assignee": {"accountId": lp_state["assignee"]}}
                     issue.update(fields=fields)
+
+    # Sync LP importance to JIRA priority if priority_map is configured
+    if priority_map:
+        importance = get_lp_bug_importance(bug)
+        if importance and importance in priority_map:
+            lp_priority = priority_map[importance]
+            jira_priority = issue.fields.priority.name if issue.fields.priority else None
+            if lp_priority != jira_priority:
+                print("Updating {} priority from {} -> {}".format(
+                    issue.key, jira_priority, lp_priority))
+                if not dry_run:
+                    issue.update(fields={"priority": {"name": lp_priority}})
 
 
 def get_lp_bug_milestone(bug):
@@ -306,6 +325,12 @@ def build_jira_issue(lp, bug, project_id, issue_type, assignee, component, opts=
     if component:
         issue_dict["components"] = [{"name": component}]
 
+    # Map LP importance to JIRA priority if priority_map is configured
+    if opts and opts.priority_map:
+        importance = get_lp_bug_importance(bug)
+        if importance and importance in opts.priority_map:
+            issue_dict['priority'] = {'name': opts.priority_map[importance]}
+
     return issue_dict
 
 
@@ -341,7 +366,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
-        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.dry_run)
+        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
@@ -551,6 +576,7 @@ def main(args=None):
 
     opts.status_map = {}
     opts.user_map = {}
+    opts.priority_map = {}
     opts.sync_project = []
 
     if opts.config:
@@ -558,6 +584,7 @@ def main(args=None):
         opts.sync_project = json_config["project"]
         opts.status_map = json_config["status_map"]
         opts.user_map = json_config["user_map"]
+        opts.priority_map = json_config.get("priority_map", {})
         if "sync_milestone" in json_config:
             opts.sync_milestone = json_config["sync_milestone"]
     elif opts.sync_project_bugs:

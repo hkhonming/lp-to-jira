@@ -13,6 +13,16 @@
     "Fix Committed": "Done",
     "Fix Released": "Done"
   },
+  "priority_map":
+  {
+    "Critical": "Highest",
+    "High": "High",
+    "Medium": "Medium",
+    "Low": "Low",
+    "Wishlist": "Lowest",
+    "Undecided": "Medium",
+    "Unknown": "Medium"
+  },
   "user_map":
   {
     "userid00": "deadbeef01",
