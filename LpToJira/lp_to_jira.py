@@ -326,11 +326,10 @@ def build_jira_issue(lp, bug, project_id, issue_type, assignee, component, opts=
         issue_dict["components"] = [{"name": component}]
 
     # Map LP importance to JIRA priority if priority_map is configured
-    priority_map = getattr(opts, 'priority_map', None) if opts else None
-    if isinstance(priority_map, dict) and priority_map:
+    if opts and opts.priority_map:
         importance = get_lp_bug_importance(bug)
-        if importance and importance in priority_map:
-            issue_dict['priority'] = {'name': priority_map[importance]}
+        if importance and importance in opts.priority_map:
+            issue_dict['priority'] = {'name': opts.priority_map[importance]}
 
     return issue_dict
 
@@ -367,8 +366,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
-        priority_map = opts.priority_map if isinstance(getattr(opts, 'priority_map', None), dict) else None
-        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, priority_map, opts.dry_run)
+        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
