@@ -558,6 +558,8 @@ def main(args=None):
         opts.sync_project = json_config["project"]
         opts.status_map = json_config["status_map"]
         opts.user_map = json_config["user_map"]
+        if "sync_milestone" in json_config:
+            opts.sync_milestone = json_config["sync_milestone"]
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)
