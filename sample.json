@@ -1,5 +1,6 @@
 {
   "sync_milestone": false,
+  "sync_all_statuses": false,
   "status_map":
   {
     "New": "To Do",
