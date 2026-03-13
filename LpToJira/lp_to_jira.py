@@ -165,19 +165,19 @@ def is_bug_in_jira(jira, bug, project_id):
         return True, issues[0]
     return False, None
 
-def get_first_matching_assignee(bug, assignees, sync_all_statuses=False):
+def get_first_matching_assignee(bug, assignees, sync_unmapped_users=False):
     """Return the first assignee and status matching an entry in assignees.
 
-    If sync_all_statuses is True and user_map is supplied but no assignee
+    If sync_unmapped_users is True and user_map is supplied but no assignee
     match is found, fall back to returning (None, first_status) so that
-    status is still synced to JIRA.
+    unmapped users are still synced to JIRA with just the status.
     """
     if len(assignees) > 0:
         for serie in bug.bug_tasks:
             if serie.assignee and (serie.assignee.name in assignees):
                 return serie.assignee.name, serie.status
         # Mode 3: fall back to first task's status with no assignee
-        if sync_all_statuses and bug.bug_tasks:
+        if sync_unmapped_users and bug.bug_tasks:
             return None, bug.bug_tasks[0].status
     else:
         # If user_map is not defined. We still want to sync the status(first series) to JIRA
@@ -188,10 +188,10 @@ def get_first_matching_assignee(bug, assignees, sync_all_statuses=False):
 
 
 
-def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, priority_map=None, dry_run=False, sync_all_statuses=False):
+def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, priority_map=None, dry_run=False, sync_unmapped_users=False):
     """Update Jira status fields from Launchpad Bug"""
 
-    assignee, status = get_first_matching_assignee(bug, assignees, sync_all_statuses)
+    assignee, status = get_first_matching_assignee(bug, assignees, sync_unmapped_users)
     if status:
         status = status_map[status]
 
@@ -374,7 +374,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
-        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run, opts.sync_all_statuses)
+        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run, opts.sync_unmapped_users)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
@@ -386,7 +386,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         # If no assignees specified, sync everything
         sync_to_jira = True
     else:
-        assignee, status = get_first_matching_assignee(bug, assignees, opts.sync_all_statuses)
+        assignee, status = get_first_matching_assignee(bug, assignees, opts.sync_unmapped_users)
         sync_to_jira = True if (assignee or status) else False
 
     if not sync_to_jira:
@@ -586,7 +586,7 @@ def main(args=None):
     opts.user_map = {}
     opts.priority_map = {}
     opts.sync_project = []
-    opts.sync_all_statuses = False
+    opts.sync_unmapped_users = False
 
     if opts.config:
         json_config = json.load(opts.config)
@@ -596,7 +596,7 @@ def main(args=None):
         opts.priority_map = json_config.get("priority_map", {})
         if "sync_milestone" in json_config:
             opts.sync_milestone = json_config["sync_milestone"]
-        opts.sync_all_statuses = json_config.get("sync_all_statuses", False)
+        opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)

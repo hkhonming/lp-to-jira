@@ -317,7 +317,7 @@ def test_get_first_matching_assignee_mode2_no_user_map():
 
 
 def test_get_first_matching_assignee_mode3_no_match_falls_back():
-    """Mode 3: user_map exists, no match, sync_all_statuses=True → (None, first status)"""
+    """Mode 3: user_map exists, no match, sync_unmapped_users=True → (None, first status)"""
     bug = Mock()
     task = Mock()
     task.assignee = Mock(name='userid99')
@@ -326,7 +326,7 @@ def test_get_first_matching_assignee_mode3_no_match_falls_back():
     bug.bug_tasks = [task]
 
     assignee, status = get_first_matching_assignee(
-        bug, ['userid00', 'userid01'], sync_all_statuses=True)
+        bug, ['userid00', 'userid01'], sync_unmapped_users=True)
     assert assignee is None
     assert status == 'Confirmed'
 
@@ -341,24 +341,24 @@ def test_get_first_matching_assignee_mode3_match_still_returns_assignee():
     bug.bug_tasks = [task]
 
     assignee, status = get_first_matching_assignee(
-        bug, ['userid00', 'userid01'], sync_all_statuses=True)
+        bug, ['userid00', 'userid01'], sync_unmapped_users=True)
     assert assignee == 'userid00'
     assert status == 'In Progress'
 
 
 def test_get_first_matching_assignee_mode3_no_bug_tasks():
-    """Mode 3: sync_all_statuses=True but no bug tasks → (None, None)"""
+    """Mode 3: sync_unmapped_users=True but no bug tasks → (None, None)"""
     bug = Mock()
     bug.bug_tasks = []
 
     assignee, status = get_first_matching_assignee(
-        bug, ['userid00'], sync_all_statuses=True)
+        bug, ['userid00'], sync_unmapped_users=True)
     assert assignee is None
     assert status is None
 
 
-def test_update_bug_in_jira_sync_all_statuses():
-    """Mode 3: no assignee match but sync_all_statuses=True → status still updated"""
+def test_update_bug_in_jira_sync_unmapped_users():
+    """Mode 3: no assignee match but sync_unmapped_users=True → status still updated"""
     jira = Mock()
     bug = Mock()
     task = Mock()
@@ -378,5 +378,5 @@ def test_update_bug_in_jira_sync_all_statuses():
 
     update_bug_in_jira(
         jira, bug, issue, ['userid00'], {}, status_map,
-        sync_all_statuses=True)
+        sync_unmapped_users=True)
     jira.transition_issue.assert_called_once_with(issue, transition='To Do')
