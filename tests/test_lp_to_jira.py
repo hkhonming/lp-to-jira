@@ -9,6 +9,7 @@ from LpToJira.lp_to_jira import\
     get_lp_bug_pkg,\
     get_lp_bug_importance,\
     get_all_lp_project_bug_tasks,\
+    get_first_matching_assignee,\
     is_bug_in_jira,\
     lp_to_jira_bug,\
     update_bug_in_jira
@@ -272,3 +273,110 @@ def test_update_bug_in_jira_no_priority_map():
 
     update_bug_in_jira(jira, bug, issue, [], {}, status_map)
     issue.update.assert_not_called()
+
+
+def test_get_first_matching_assignee_mode1_match():
+    """Mode 1: user_map exists, assignee matches → return (assignee, status)"""
+    bug = Mock()
+    task = Mock()
+    task.assignee = Mock(name='userid00')
+    task.assignee.name = 'userid00'
+    task.status = 'In Progress'
+    bug.bug_tasks = [task]
+
+    assignee, status = get_first_matching_assignee(bug, ['userid00', 'userid01'])
+    assert assignee == 'userid00'
+    assert status == 'In Progress'
+
+
+def test_get_first_matching_assignee_mode1_no_match():
+    """Mode 1: user_map exists, no assignee match → return (None, None)"""
+    bug = Mock()
+    task = Mock()
+    task.assignee = Mock(name='userid99')
+    task.assignee.name = 'userid99'
+    task.status = 'In Progress'
+    bug.bug_tasks = [task]
+
+    assignee, status = get_first_matching_assignee(bug, ['userid00', 'userid01'])
+    assert assignee is None
+    assert status is None
+
+
+def test_get_first_matching_assignee_mode2_no_user_map():
+    """Mode 2: user_map empty → return (None, first status)"""
+    bug = Mock()
+    task = Mock()
+    task.assignee = None
+    task.status = 'Triaged'
+    bug.bug_tasks = [task]
+
+    assignee, status = get_first_matching_assignee(bug, [])
+    assert assignee is None
+    assert status == 'Triaged'
+
+
+def test_get_first_matching_assignee_mode3_no_match_falls_back():
+    """Mode 3: user_map exists, no match, sync_unmapped_users=True → (None, first status)"""
+    bug = Mock()
+    task = Mock()
+    task.assignee = Mock(name='userid99')
+    task.assignee.name = 'userid99'
+    task.status = 'Confirmed'
+    bug.bug_tasks = [task]
+
+    assignee, status = get_first_matching_assignee(
+        bug, ['userid00', 'userid01'], sync_unmapped_users=True)
+    assert assignee is None
+    assert status == 'Confirmed'
+
+
+def test_get_first_matching_assignee_mode3_match_still_returns_assignee():
+    """Mode 3: user_map exists, assignee matches → still return (assignee, status)"""
+    bug = Mock()
+    task = Mock()
+    task.assignee = Mock(name='userid00')
+    task.assignee.name = 'userid00'
+    task.status = 'In Progress'
+    bug.bug_tasks = [task]
+
+    assignee, status = get_first_matching_assignee(
+        bug, ['userid00', 'userid01'], sync_unmapped_users=True)
+    assert assignee == 'userid00'
+    assert status == 'In Progress'
+
+
+def test_get_first_matching_assignee_mode3_no_bug_tasks():
+    """Mode 3: sync_unmapped_users=True but no bug tasks → (None, None)"""
+    bug = Mock()
+    bug.bug_tasks = []
+
+    assignee, status = get_first_matching_assignee(
+        bug, ['userid00'], sync_unmapped_users=True)
+    assert assignee is None
+    assert status is None
+
+
+def test_update_bug_in_jira_sync_unmapped_users():
+    """Mode 3: no assignee match but sync_unmapped_users=True → status still updated"""
+    jira = Mock()
+    bug = Mock()
+    task = Mock()
+    task.assignee = Mock(name='userid99')
+    task.assignee.name = 'userid99'
+    task.status = 'New'
+    task.importance = 'High'
+    bug.bug_tasks = [task]
+
+    issue = Mock()
+    issue.key = 'TEST-1'
+    issue.fields.assignee = None
+    issue.fields.status.name = 'In Progress'
+    issue.fields.priority = None
+
+    status_map = {'New': 'To Do'}
+
+    update_bug_in_jira(
+        jira, bug, issue, ['userid00'], {}, status_map,
+        sync_unmapped_users=True)
+    jira.transition_issue.assert_called_once_with(issue, transition='To Do')
