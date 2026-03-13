@@ -1,3 +1,6 @@
+import json
+import os
+import tempfile
 import pytest
 from unittest.mock import Mock, patch
 
@@ -5,7 +8,8 @@ from LpToJira.lp_to_jira import (
     get_lp_bug_milestone,
     ensure_jira_version,
     sync_milestone_to_jira,
-    lp_to_jira_bug
+    lp_to_jira_bug,
+    main
 )
 
 
@@ -418,3 +422,135 @@ def test_sync_milestone_debug_enabled(capsys):
     # Verify DEBUG messages are in output
     assert "DEBUG: current_versions = []" in captured.out
     assert "DEBUG: current_versions type = <class 'list'>" in captured.out
+
+
+def _write_config_tempfile(config_dict):
+    """Write config_dict as JSON to a NamedTemporaryFile and return its path."""
+    tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+    json.dump(config_dict, tmp)
+    tmp.flush()
+    tmp.close()
+    return tmp.name
+
+
+def _make_mock_infra():
+    """Return (mock_lp, mock_jira, mock_jira_api) with standard stubs."""
+    mock_lp = Mock()
+    mock_jira = Mock()
+    mock_jira_api = Mock()
+    mock_jira_api.server = "https://jira.example.com"
+    mock_jira_api.login = "user"
+    mock_jira_api.token = "token"
+    return mock_lp, mock_jira, mock_jira_api
+
+
+def _make_fake_tasks():
+    """Return a fake iterable of one bug task."""
+    fake_bug = Mock()
+    fake_bug_task = Mock()
+    fake_bug_task.bug = fake_bug
+    fake_tasks = Mock()
+    fake_tasks.__iter__ = Mock(return_value=iter([fake_bug_task]))
+    return fake_tasks
+
+
+def test_config_json_sync_milestone_sets_flag():
+    """Test that sync_milestone=true in config JSON is applied to opts passed to lp_to_jira_bug."""
+    config = {
+        "sync_milestone": True,
+        "status_map": {},
+        "user_map": {},
+        "project": [{"launchpad_project": "testproject", "jira_project": "TEST",
+                     "issue_type": "Bug", "component": "testcomponent"}]
+    }
+    config_path = _write_config_tempfile(config)
+    mock_lp, mock_jira, mock_jira_api = _make_mock_infra()
+    fake_tasks = _make_fake_tasks()
+
+    captured_opts = []
+
+    def capture_opts(lp, jira, bug, sync_config, opts):
+        captured_opts.append(opts)
+
+    try:
+        with patch("LpToJira.lp_to_jira.Launchpad") as mock_lp_class, \
+             patch("LpToJira.lp_to_jira.JIRA") as mock_jira_class, \
+             patch("LpToJira.lp_to_jira.jira_api", return_value=mock_jira_api), \
+             patch("LpToJira.lp_to_jira.get_all_lp_project_bug_tasks", return_value=fake_tasks), \
+             patch("LpToJira.lp_to_jira.lp_to_jira_bug", side_effect=capture_opts):
+            mock_lp_class.login_with.return_value = mock_lp
+            mock_jira_class.return_value = mock_jira
+            main(["--config-json", config_path])
+    finally:
+        os.unlink(config_path)
+
+    assert len(captured_opts) == 1
+    assert captured_opts[0].sync_milestone is True
+
+
+def test_config_json_sync_milestone_disabled():
+    """Test that sync_milestone=false in config JSON keeps milestone syncing disabled."""
+    config = {
+        "sync_milestone": False,
+        "status_map": {},
+        "user_map": {},
+        "project": [{"launchpad_project": "testproject", "jira_project": "TEST",
+                     "issue_type": "Bug", "component": "testcomponent"}]
+    }
+    config_path = _write_config_tempfile(config)
+    mock_lp, mock_jira, mock_jira_api = _make_mock_infra()
+    fake_tasks = _make_fake_tasks()
+
+    captured_opts = []
+
+    def capture_opts(lp, jira, bug, sync_config, opts):
+        captured_opts.append(opts)
+
+    try:
+        with patch("LpToJira.lp_to_jira.Launchpad") as mock_lp_class, \
+             patch("LpToJira.lp_to_jira.JIRA") as mock_jira_class, \
+             patch("LpToJira.lp_to_jira.jira_api", return_value=mock_jira_api), \
+             patch("LpToJira.lp_to_jira.get_all_lp_project_bug_tasks", return_value=fake_tasks), \
+             patch("LpToJira.lp_to_jira.lp_to_jira_bug", side_effect=capture_opts):
+            mock_lp_class.login_with.return_value = mock_lp
+            mock_jira_class.return_value = mock_jira
+            main(["--config-json", config_path])
+    finally:
+        os.unlink(config_path)
+
+    assert len(captured_opts) == 1
+    assert captured_opts[0].sync_milestone is False
+
+
+def test_config_json_without_sync_milestone_key():
+    """Test that omitting sync_milestone in config JSON leaves the CLI default (False)."""
+    config = {
+        "status_map": {},
+        "user_map": {},
+        "project": [{"launchpad_project": "testproject", "jira_project": "TEST",
+                     "issue_type": "Bug", "component": "testcomponent"}]
+    }
+    config_path = _write_config_tempfile(config)
+    mock_lp, mock_jira, mock_jira_api = _make_mock_infra()
+    fake_tasks = _make_fake_tasks()
+
+    captured_opts = []
+
+    def capture_opts(lp, jira, bug, sync_config, opts):
+        captured_opts.append(opts)
+
+    try:
+        with patch("LpToJira.lp_to_jira.Launchpad") as mock_lp_class, \
+             patch("LpToJira.lp_to_jira.JIRA") as mock_jira_class, \
+             patch("LpToJira.lp_to_jira.jira_api", return_value=mock_jira_api), \
+             patch("LpToJira.lp_to_jira.get_all_lp_project_bug_tasks", return_value=fake_tasks), \
+             patch("LpToJira.lp_to_jira.lp_to_jira_bug", side_effect=capture_opts):
+            mock_lp_class.login_with.return_value = mock_lp
+            mock_jira_class.return_value = mock_jira
+            main(["--config-json", config_path])
+    finally:
+        os.unlink(config_path)
+
+    assert len(captured_opts) == 1
+    # CLI default for --sync-milestone is False
+    assert captured_opts[0].sync_milestone is False
