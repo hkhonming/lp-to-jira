@@ -7,9 +7,11 @@ from LpToJira.lp_to_jira import\
     create_jira_issue,\
     get_lp_bug,\
     get_lp_bug_pkg,\
+    get_lp_bug_importance,\
     get_all_lp_project_bug_tasks,\
     is_bug_in_jira,\
-    lp_to_jira_bug
+    lp_to_jira_bug,\
+    update_bug_in_jira
 
 
 def test_get_lp_bug(lp):
@@ -159,3 +161,114 @@ def test_lp_to_jira_bug(lp, empty_bug):
         lp_to_jira_bug(lp, jira, empty_bug, config01, opts)
 
 # =============================================================================
+
+def test_get_lp_bug_importance():
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='Critical')]
+    assert get_lp_bug_importance(bug) == 'Critical'
+
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='High'), Mock(importance='Medium')]
+    assert get_lp_bug_importance(bug) == 'High'
+
+    bug = Mock()
+    bug.bug_tasks = []
+    assert get_lp_bug_importance(bug) is None
+
+
+def test_build_jira_issue_with_priority_map():
+    bug = Mock()
+    bug.id = 1
+    bug.title = "test bug"
+    bug.description = "test description"
+    bug.bug_tasks = [Mock(bug_target_name='systemd (Ubuntu)', importance='High')]
+
+    opts = Mock()
+    opts.user_map = {}
+    opts.priority_map = {'High': 'High', 'Critical': 'Highest'}
+
+    issue_dict = build_jira_issue(None, bug, 'PROJ', 'Bug', None, None, opts)
+    assert issue_dict.get('priority') == {'name': 'High'}
+
+
+def test_build_jira_issue_no_priority_map():
+    bug = Mock()
+    bug.id = 1
+    bug.title = "test bug"
+    bug.description = "test description"
+    bug.bug_tasks = [Mock(bug_target_name='systemd (Ubuntu)', importance='High')]
+
+    opts = Mock()
+    opts.user_map = {}
+    opts.priority_map = {}
+
+    issue_dict = build_jira_issue(None, bug, 'PROJ', 'Bug', None, None, opts)
+    assert 'priority' not in issue_dict
+
+
+def test_build_jira_issue_unmapped_importance():
+    bug = Mock()
+    bug.id = 1
+    bug.title = "test bug"
+    bug.description = "test description"
+    bug.bug_tasks = [Mock(bug_target_name='systemd (Ubuntu)', importance='Wishlist')]
+
+    opts = Mock()
+    opts.user_map = {}
+    opts.priority_map = {'High': 'High', 'Critical': 'Highest'}
+
+    issue_dict = build_jira_issue(None, bug, 'PROJ', 'Bug', None, None, opts)
+    assert 'priority' not in issue_dict
+
+
+def test_update_bug_in_jira_priority():
+    jira = Mock()
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='New')]
+
+    issue = Mock()
+    issue.key = 'TEST-1'
+    issue.fields.assignee = None
+    issue.fields.status.name = 'To Do'
+    issue.fields.priority.name = 'Medium'
+
+    priority_map = {'Critical': 'Highest', 'High': 'High'}
+    status_map = {'New': 'To Do'}
+
+    update_bug_in_jira(jira, bug, issue, [], {}, status_map, priority_map)
+    issue.update.assert_called_once_with(fields={'priority': {'name': 'Highest'}})
+
+
+def test_update_bug_in_jira_priority_already_set():
+    jira = Mock()
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='New')]
+
+    issue = Mock()
+    issue.key = 'TEST-1'
+    issue.fields.assignee = None
+    issue.fields.status.name = 'To Do'
+    issue.fields.priority.name = 'Highest'
+
+    priority_map = {'Critical': 'Highest'}
+    status_map = {'New': 'To Do'}
+
+    update_bug_in_jira(jira, bug, issue, [], {}, status_map, priority_map)
+    issue.update.assert_not_called()
+
+
+def test_update_bug_in_jira_no_priority_map():
+    jira = Mock()
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='New')]
+
+    issue = Mock()
+    issue.key = 'TEST-1'
+    issue.fields.assignee = None
+    issue.fields.status.name = 'To Do'
+    issue.fields.priority.name = 'Medium'
+
+    status_map = {'New': 'To Do'}
+
+    update_bug_in_jira(jira, bug, issue, [], {}, status_map)
+    issue.update.assert_not_called()
