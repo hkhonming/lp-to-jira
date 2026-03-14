@@ -314,6 +314,76 @@ def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False, debug=Fa
         print(f"(dry-run) Would update {issue.key} with milestone '{milestone_name}'")
 
 
+def is_series_in_jira(jira, bug, task_name, project_id):
+    """Check if a subtask for a specific LP series already exists in JIRA.
+
+    Returns a (bool, issue_or_None) tuple, consistent with is_bug_in_jira.
+    """
+    issues = jira.search_issues(
+        'project = "{}" AND summary ~ "LP#{}" AND issuetype = Sub-task'.format(
+            project_id, bug.id))
+    if issues:
+        target_fragment = '[{}]'.format(task_name)
+        for issue in issues:
+            if target_fragment in issue.fields.summary:
+                return True, issue
+    return False, None
+
+
+def sync_series_to_jira(jira, bug, parent_issue, project_id, status_map, dry_run=False):
+    """Create JIRA Sub-tasks for each Ubuntu series affected by a Launchpad bug.
+
+    Each Ubuntu series task in the LP bug becomes a Sub-task under
+    *parent_issue*.  When *dry_run* is True no JIRA objects are created;
+    *parent_issue* may be None in that case.
+    """
+    from LpToJira.lp_bug import ubuntu_devel, ubuntu_version
+
+    for task in bug.bug_tasks:
+        task_name = task.bug_target_name
+        if " (Ubuntu" not in task_name:
+            continue
+
+        # Extract the series name, e.g. "Focal" from "systemd (Ubuntu Focal)"
+        serie = task_name[task_name.index("Ubuntu") + 7:-1]
+        if serie == '':
+            serie = ubuntu_devel
+        elif serie not in ubuntu_version:
+            continue
+
+        # Check whether a subtask for this series already exists
+        exists, existing_issue = is_series_in_jira(jira, bug, task_name, project_id)
+        if exists:
+            print("Series subtask for LP#{} {} already exists: {}".format(
+                bug.id, task_name, existing_issue.key))
+            continue
+
+        summary = 'LP#{} [{}] {}'.format(bug.id, task_name, bug.title)
+
+        if dry_run:
+            print("(dry-run) Creating series subtask: {}".format(summary))
+            continue
+
+        subtask_dict = {
+            'project': project_id,
+            'summary': summary,
+            'issuetype': {'name': 'Sub-task'},
+            'parent': {'key': parent_issue.key},
+        }
+        new_subtask = jira.create_issue(fields=subtask_dict)
+        print("Created series subtask {}/browse/{}".format(
+            jira.client_info(), new_subtask.key))
+
+        # Transition the subtask to the mapped JIRA status when available
+        if status_map and hasattr(task, 'status') and task.status in status_map:
+            jira_status = status_map[task.status]
+            try:
+                jira.transition_issue(new_subtask, transition=jira_status)
+            except Exception as e:
+                print("Could not set status for subtask {}: {}".format(
+                    new_subtask.key, e))
+
+
 def build_jira_issue(lp, bug, project_id, issue_type, assignee, component, opts=None):
     """Builds and return a dict to create a Jira Issue from"""
 
@@ -378,6 +448,9 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
+        # Sync all series as subtasks if enabled
+        if getattr(opts, 'sync_all_series', False):
+            sync_series_to_jira(jira, bug, issue, project_id, opts.status_map, opts.dry_run)
         return
 
     sync_to_jira = False
@@ -406,11 +479,17 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
             milestone_name = get_lp_bug_milestone(bug)
             if milestone_name:
                 print(f"(dry-run) Would sync milestone '{milestone_name}' to JIRA")
+        # Sync all series as subtasks (dry-run) if enabled
+        if getattr(opts, 'sync_all_series', False):
+            sync_series_to_jira(jira, bug, None, project_id, opts.status_map, dry_run=True)
     else:
         jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run, opts.debug)
+        # Sync all series as subtasks if enabled
+        if getattr(opts, 'sync_all_series', False):
+            sync_series_to_jira(jira, bug, jira_issue, project_id, opts.status_map)
 
     if opts.lp_link:
        if opts.dry_run:
@@ -587,6 +666,7 @@ def main(args=None):
     opts.priority_map = {}
     opts.sync_project = []
     opts.sync_unmapped_users = False
+    opts.sync_all_series = False
 
     if opts.config:
         json_config = json.load(opts.config)
@@ -597,6 +677,7 @@ def main(args=None):
         if "sync_milestone" in json_config:
             opts.sync_milestone = json_config["sync_milestone"]
         opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
+        opts.sync_all_series = json_config.get("sync_all_series", False)
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)
