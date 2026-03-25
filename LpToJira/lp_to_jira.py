@@ -81,7 +81,14 @@ def get_lp_bug_pkg(bug):
 
 def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
     """Return iterable IBugTasks of all Bugs in a Project filed in the past n
-    days. If days is not specified, return all Bugs."""
+    days. If days is not specified, return all Bugs.
+
+    Args:
+        lp: Launchpad API instance
+        project: LP project name
+        days: Only return bugs modified in the past n days
+        tags: List of tags to filter by. Prefix with '-' to exclude.
+    """
 
     try:
         lp_project = lp.projects[project]
@@ -94,7 +101,63 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
     if days:
         modified_since = (datetime.now() - timedelta(days)).strftime('%Y-%m-%d')
 
-    bug_tasks = lp_project.searchTasks(
+    # Build search parameters
+    search_params = {
+        'modified_since': modified_since,
+        'status': [
+            'New',
+            'Incomplete',
+            'Triaged',
+            'Opinion',
+            'Invalid',
+            'Won\'t Fix',
+            'Confirmed',
+            'In Progress',
+            'Fix Committed',
+            'Fix Released'
+        ]
+    }
+
+    # Handle tag filtering if tags are specified
+    if tags:
+        include_tags = [t for t in tags if not t.startswith('-')]
+        if include_tags:
+            search_params['tags'] = include_tags
+        # Note: LP API exclusion requires post-query filtering for tags with '-' prefix
+
+    bug_tasks = lp_project.searchTasks(**search_params)
+
+    return bug_tasks
+
+
+def get_source_package_bug_tasks(lp, distribution, package, days=None):
+    """Return iterable IBugTasks for bugs affecting a source package.
+
+    Args:
+        lp: Launchpad API instance
+        distribution: LP distribution name (e.g., 'ubuntu')
+        package: Source package name (e.g., 'rocm')
+        days: Only return bugs modified in the past n days
+
+    Returns:
+        Iterable of IBugTask objects, or None if package not found
+    """
+    try:
+        distro = lp.distributions[distribution]
+    except KeyError:
+        print(f"Couldn't find distribution '{distribution}'")
+        return None
+
+    source_package = distro.getSourcePackage(name=package)
+    if source_package is None:
+        print(f"Source package '{package}' not found in {distribution}")
+        return None
+
+    modified_since = None
+    if days:
+        modified_since = (datetime.now() - timedelta(days)).strftime('%Y-%m-%d')
+
+    bug_tasks = source_package.searchTasks(
         modified_since=modified_since,
         status=[
             'New',
@@ -111,6 +174,43 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
     )
 
     return bug_tasks
+
+
+def get_bug_subscriber_names(bug):
+    """Return list of subscriber names (teams and users) for a bug.
+
+    Args:
+        bug: LP bug object
+
+    Returns:
+        List of subscriber name strings
+    """
+    names = []
+    try:
+        for subscription in bug.subscriptions:
+            names.append(subscription.person.name)
+    except Exception as e:
+        print(f"Warning: Could not fetch subscribers for bug {bug.id}: {e}")
+    return names
+
+
+def bug_has_matching_subscriber(bug, subscribers=None):
+    """Check if bug has a subscriber matching the filter criteria.
+
+    Args:
+        bug: LP bug object
+        subscribers: List of LP usernames/team names to match (e.g., ['bullwinkle-team'])
+
+    Returns:
+        True if no filter specified (subscribers is None or empty), or
+        if any subscriber name matches an entry in subscribers list
+    """
+    if not subscribers:
+        return True  # No filter = sync all
+
+    bug_subscribers = get_bug_subscriber_names(bug)
+    return any(name in subscribers for name in bug_subscribers)
+
 
 def get_all_lp_merge_proposals(lp, project, reviewers):
     """Return list of merge proposals for the specified reviewers and project."""
@@ -374,6 +474,8 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
+        if opts.debug:
+            print(f"    Already exists: {issue.key}")
         update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run, opts.sync_unmapped_users)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
@@ -390,6 +492,8 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         sync_to_jira = True if (assignee or status) else False
 
     if not sync_to_jira:
+        if opts.debug:
+            print(f"    Skipping - bug assignee not in user_map (use sync_unmapped_users: true to override)")
         return
 
     issue_type = sync.get("issue_type", "Bug")
@@ -527,6 +631,33 @@ def main(args=None):
         help='Only query merge proposals'
     )
     opt_parser.add_argument(
+        '--sync-source-package',
+        dest='sync_source_package',
+        type=str,
+        metavar='PACKAGE',
+        help=textwrap.dedent('''
+            Sync bugs from an Ubuntu source package to JIRA.
+            Example: --sync-source-package rocm BWK
+            ''')
+    )
+    opt_parser.add_argument(
+        '--distribution',
+        dest='distribution',
+        type=str,
+        default='ubuntu',
+        help='LP distribution for source package sync (default: ubuntu)'
+    )
+    opt_parser.add_argument(
+        '--subscriber',
+        dest='subscribers',
+        action='append',
+        type=str,
+        help=textwrap.dedent('''
+            Only sync bugs where specified user/team is subscribed.
+            Can be specified multiple times. If not specified, syncs all bugs.
+            ''')
+    )
+    opt_parser.add_argument(
         '--dry-run',
         dest='dry_run',
         action='store_true',
@@ -555,13 +686,15 @@ def main(args=None):
 
     opts = opt_parser.parse_args(args)
 
-    if (opts.bug == 0 and not opts.sync_project_bugs and not opts.config):
+    if (opts.bug == 0 and not opts.sync_project_bugs and not opts.config and not opts.sync_source_package):
         opt_parser.print_usage()
-        print('lp-to-jira: error: the follow argument is required: bug or config-json')
+        print('lp-to-jira: error: the follow argument is required: bug, config-json, or --sync-source-package')
         return 1
 
     # Connect to Launchpad API
     # TODO: catch exception if the Launchpad API isn't open
+    if opts.debug:
+        print("Connecting to Launchpad API...")
     snap_home = os.getenv("SNAP_USER_COMMON")
     if snap_home:
         credential_store = UnencryptedFileCredentialStore(
@@ -573,33 +706,56 @@ def main(args=None):
         'foundations',
         'production',
         version='devel', credential_store=credential_store)
+    if opts.debug:
+        print("Connected to Launchpad API")
 
     # Connect to the JIRA API
+    if opts.debug:
+        print("Connecting to JIRA API...")
     try:
         api = jira_api()
     except ValueError:
         return "ERROR: Cannot initialize JIRA API."
 
     jira = JIRA(api.server, basic_auth=(api.login, api.token))
+    if opts.debug:
+        print("Connected to JIRA API")
 
     opts.status_map = {}
     opts.user_map = {}
     opts.priority_map = {}
     opts.sync_project = []
+    opts.sync_source_packages = []
     opts.sync_unmapped_users = False
 
     if opts.config:
         json_config = json.load(opts.config)
-        opts.sync_project = json_config["project"]
-        opts.status_map = json_config["status_map"]
-        opts.user_map = json_config["user_map"]
+        opts.sync_project = json_config.get("project", [])
+        opts.status_map = json_config.get("status_map", {})
+        opts.user_map = json_config.get("user_map", {})
         opts.priority_map = json_config.get("priority_map", {})
+        opts.sync_source_packages = json_config.get("source_packages", [])
         if "sync_milestone" in json_config:
             opts.sync_milestone = json_config["sync_milestone"]
         opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)
+
+    # Handle CLI source package sync
+    if opts.sync_source_package:
+        if not opts.project:
+            print('lp-to-jira: error: --sync-source-package requires JIRA project argument')
+            return 1
+
+        pkg_sync = {
+            "distribution": opts.distribution,
+            "package": opts.sync_source_package,
+            "jira_project": opts.project,
+        }
+        if opts.subscribers:
+            pkg_sync["subscribers"] = opts.subscribers
+        opts.sync_source_packages.append(pkg_sync)
 
     if opts.merge_proposals:
         reviewers = list(opts.user_map.keys())
@@ -619,8 +775,35 @@ def main(args=None):
             bug = bug_task.bug
             lp_to_jira_bug(lp, jira, bug, sync, opts)
 
-    if len(opts.sync_project) > 0:
-        # Stop here if any project sync was specified
+    # Iterate over source packages
+    for pkg_sync in opts.sync_source_packages:
+        distribution = pkg_sync.get("distribution", "ubuntu")
+        package = pkg_sync["package"]
+
+        print(f"Syncing bugs from {distribution}/+source/{package}")
+
+        tasks_list = get_source_package_bug_tasks(lp, distribution, package, opts.days)
+        if tasks_list is None:
+            continue
+
+        # Extract subscriber filter (teams and users treated the same in LP)
+        subscribers = pkg_sync.get("subscribers")
+
+        for bug_task in tasks_list:
+            bug = bug_task.bug
+
+            # Apply subscriber filter
+            if not bug_has_matching_subscriber(bug, subscribers):
+                if opts.debug:
+                    print(f"  Skipping LP#{bug.id} - no matching subscriber")
+                continue
+
+            if opts.debug:
+                print(f"  Processing LP#{bug.id}: {bug.title}")
+            lp_to_jira_bug(lp, jira, bug, pkg_sync, opts)
+
+    if len(opts.sync_project) > 0 or len(opts.sync_source_packages) > 0:
+        # Stop here if any project/source package sync was specified
         return 0
 
     bug_number = opts.bug

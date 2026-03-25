@@ -54,6 +54,94 @@ Examples:
 
 ```
 
+## Source Package Bug Syncing
+
+lp-to-jira can sync bugs from Ubuntu source packages (not just LP projects). This is useful for watching bugs filed against specific packages in Ubuntu.
+
+### CLI Usage
+
+```bash
+# Sync all bugs from rocm source package to BWK project
+lp-to-jira --sync-source-package rocm BWK
+
+# Sync only bugs where bullwinkle-team is subscribed
+lp-to-jira --sync-source-package rocm --subscriber bullwinkle-team BWK
+
+# Filter by multiple subscribers (OR logic)
+lp-to-jira --sync-source-package rocm --subscriber bullwinkle-team --subscriber johndoe BWK
+
+# Combine with days filter
+lp-to-jira --sync-source-package rocm --subscriber bullwinkle-team -d 30 BWK
+
+# Dry run to preview changes
+lp-to-jira --sync-source-package rocm --subscriber bullwinkle-team BWK --dry-run
+
+# Use a different distribution (default is ubuntu)
+lp-to-jira --sync-source-package rocm --distribution ubuntu BWK
+```
+
+### Config File Usage
+
+Add a `source_packages` section to your JSON config file. The source package sync uses all the shared config fields (`status_map`, `user_map`, `priority_map`, etc.) for mapping LP data to JIRA:
+
+```json
+{
+  "sync_milestone": true,
+  "sync_unmapped_users": false,
+  "status_map": {
+    "New": "To Do",
+    "Incomplete": "To Do",
+    "Triaged": "To Do",
+    "Confirmed": "In Progress",
+    "In Progress": "In Progress",
+    "Fix Committed": "Done",
+    "Fix Released": "Done"
+  },
+  "priority_map": {
+    "Critical": "Highest",
+    "High": "High",
+    "Medium": "Medium",
+    "Low": "Low"
+  },
+  "user_map": {
+    "lp-username": "jira-account-id"
+  },
+  "source_packages": [
+    {
+      "package": "rocm",
+      "jira_project": "BWK",
+      "issue_type": "Bug",
+      "component": "ROCm",
+      "subscribers": ["bullwinkle-team"]
+    },
+    {
+      "package": "hip",
+      "jira_project": "BWK"
+    }
+  ]
+}
+```
+
+Then run with:
+```bash
+lp-to-jira --config-json config.json
+```
+
+### Source Package Config Schema
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `package` | Yes | Ubuntu source package name (e.g., "rocm") |
+| `jira_project` | Yes | Target JIRA project key |
+| `distribution` | No | LP distribution (default: "ubuntu") |
+| `issue_type` | No | JIRA issue type (default: "Bug") |
+| `component` | No | JIRA component to assign |
+| `subscribers` | No | List of LP usernames/teams to filter by. If omitted, syncs all bugs |
+
+The source package entries define *which* bugs to sync. All mapping/transformation uses the shared top-level config fields (`status_map`, `user_map`, `priority_map`, `sync_milestone`, `sync_unmapped_users`).
+
+Note: In Launchpad, teams and users are both referenced as `~name`, so the `subscribers` field accepts both.
+
 # lp-to-jira-report
 Python helper script that produces report listing all the bugs in a given project that have been imported with lp-to-jira.
 

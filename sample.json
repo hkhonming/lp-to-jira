@@ -50,5 +50,20 @@
         "issue_type" : "Bug",
         "component": "jiracomponent03"
       }
+    ],
+  "source_packages":
+    [
+      {
+        "package": "rocm",
+        "jira_project": "BWK",
+        "issue_type": "Bug",
+        "component": "ROCm",
+        "subscribers": ["bullwinkle-team"]
+      },
+      {
+        "package": "hip",
+        "jira_project": "BWK",
+        "issue_type": "Bug"
+      }
     ]
 }
