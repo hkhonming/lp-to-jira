@@ -39,16 +39,16 @@
         "component": "jiracomponent01"
       },
       {
-        "launchpad_project": "nosuchlpproject02",
-        "jira_project": "JIRAPROJECTKEY02",
-        "issue_type" : "Bug",
-        "component": "jiracomponent02"
+        "launchpad_project": "ubuntu/+source/rocm",
+        "jira_project": "BWK",
+        "issue_type": "Bug",
+        "component": "ROCm",
+        "subscribers": ["bullwinkle-team"]
       },
       {
-        "launchpad_project": "nosuchlpproject03",
-        "jira_project": "JIRAPROJECTKEY03",
-        "issue_type" : "Bug",
-        "component": "jiracomponent03"
+        "launchpad_project": "ubuntu/+source/hip",
+        "jira_project": "BWK",
+        "issue_type": "Bug"
       }
     ]
 }

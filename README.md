@@ -54,6 +54,66 @@ Examples:
 
 ```
 
+## Source Package Bug Syncing
+
+lp-to-jira can sync bugs from Ubuntu source packages using the `ubuntu/+source/<package>` format in the `launchpad_project` field.
+
+### CLI Usage
+
+```bash
+# Sync bugs from rocm source package to BWK project
+lp-to-jira -s ubuntu/+source/rocm BWK
+
+# With subscriber filter (only sync bugs where team/user is subscribed)
+lp-to-jira -s ubuntu/+source/rocm --subscriber bullwinkle-team BWK
+
+# Filter by multiple subscribers (OR logic)
+lp-to-jira -s ubuntu/+source/rocm --subscriber bullwinkle-team --subscriber johndoe BWK
+
+# Combine with days filter
+lp-to-jira -s ubuntu/+source/rocm --subscriber bullwinkle-team -d 30 BWK
+```
+
+### Config File Usage
+
+Use the `ubuntu/+source/<package>` format in the `launchpad_project` field. Add `subscribers` to filter by subscribed users/teams:
+
+```json
+{
+  "sync_unmapped_users": true,
+  "status_map": {
+    "New": "To Do",
+    "Confirmed": "In Progress",
+    "Fix Released": "Done"
+  },
+  "project": [
+    {
+      "launchpad_project": "ubuntu/+source/rocm",
+      "jira_project": "BWK",
+      "issue_type": "Bug",
+      "component": "ROCm",
+      "subscribers": ["bullwinkle-team"]
+    },
+    {
+      "launchpad_project": "ubuntu/+source/hip",
+      "jira_project": "BWK"
+    }
+  ]
+}
+```
+
+### Project Config Schema
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `launchpad_project` | Yes | LP project or source package (e.g., "ubuntu/+source/rocm") |
+| `jira_project` | Yes | Target JIRA project key |
+| `issue_type` | No | JIRA issue type (default: "Bug") |
+| `component` | No | JIRA component to assign |
+| `subscribers` | No | List of LP usernames/teams to filter by. If omitted, syncs all bugs |
+
+Note: In Launchpad, teams and users are both referenced as `~name`, so the `subscribers` field accepts both.
+
 # lp-to-jira-report
 Python helper script that produces report listing all the bugs in a given project that have been imported with lp-to-jira.
 
