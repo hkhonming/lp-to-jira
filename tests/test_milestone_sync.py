@@ -217,8 +217,8 @@ def test_sync_milestone_to_jira_dry_run():
     issue.update.assert_not_called()
 
 
-def test_sync_milestone_to_jira_add_to_existing():
-    """Test syncing milestone when issue has other versions"""
+def test_sync_milestone_to_jira_overwrite_existing():
+    """Test syncing milestone when issue already has a different version overwrites it"""
     jira = Mock()
     
     # Setup bug with milestone
@@ -244,14 +244,11 @@ def test_sync_milestone_to_jira_add_to_existing():
     
     sync_milestone_to_jira(jira, bug, issue, "TEST")
     
-    # Should add the new milestone while keeping existing ones
+    # Should overwrite with the new milestone only
     issue.update.assert_called_once()
     call_args = issue.update.call_args
     fix_versions = call_args.kwargs['fields']['fixVersions']
-    assert len(fix_versions) == 2
-    # Both versions should be dictionaries for proper JSON serialization
-    assert fix_versions[0] == {'name': 'ubuntu-20.04'}
-    assert fix_versions[1] == {'name': 'ubuntu-22.04'}
+    assert fix_versions == [{'name': 'ubuntu-22.04'}]
 
 
 def test_lp_to_jira_bug_milestone_disabled_by_default():

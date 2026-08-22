@@ -305,6 +305,10 @@ def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False, debug=Fa
                 if current_versions:
                     print(f"DEBUG: first version type = {type(current_versions[0])}")
             
+            if milestone_name in current_version_names:
+                # Milestone already set; nothing to update
+                return
+            
             new_versions = [{'name': milestone_name}]
             issue.update(fields={'fixVersions': new_versions})
             print(f"Updated {issue.key} with milestone '{milestone_name}'")
