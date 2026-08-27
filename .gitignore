@@ -8,3 +8,5 @@ __pycache__/
 
 # Ignore pip artefacts
 *.egg-info/
+
+*.snap

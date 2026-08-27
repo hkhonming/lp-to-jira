@@ -81,7 +81,14 @@ def get_lp_bug_pkg(bug):
 
 def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
     """Return iterable IBugTasks of all Bugs in a Project filed in the past n
-    days. If days is not specified, return all Bugs."""
+    days. If days is not specified, return all Bugs.
+
+    Args:
+        lp: Launchpad API instance
+        project: LP project name
+        days: Only return bugs modified in the past n days
+        tags: List of tags to filter by. Prefix with '-' to exclude.
+    """
 
     try:
         lp_project = lp.projects[project]
@@ -94,9 +101,10 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
     if days:
         modified_since = (datetime.now() - timedelta(days)).strftime('%Y-%m-%d')
 
-    bug_tasks = lp_project.searchTasks(
-        modified_since=modified_since,
-        status=[
+    # Build search parameters
+    search_params = {
+        'modified_since': modified_since,
+        'status': [
             'New',
             'Incomplete',
             'Triaged',
@@ -108,9 +116,55 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
             'Fix Committed',
             'Fix Released'
         ]
-    )
+    }
+
+    # Handle tag filtering if tags are specified
+    if tags:
+        include_tags = [t for t in tags if not t.startswith('-')]
+        if include_tags:
+            search_params['tags'] = include_tags
+        # Note: LP API exclusion requires post-query filtering for tags with '-' prefix
+
+    bug_tasks = lp_project.searchTasks(**search_params)
 
     return bug_tasks
+
+
+def get_bug_subscriber_names(bug):
+    """Return list of subscriber names (teams and users) for a bug.
+
+    Args:
+        bug: LP bug object
+
+    Returns:
+        List of subscriber name strings
+    """
+    names = []
+    try:
+        for subscription in bug.subscriptions:
+            names.append(subscription.person.name)
+    except Exception as e:
+        print(f"Warning: Could not fetch subscribers for bug {bug.id}: {e}")
+    return names
+
+
+def bug_has_matching_subscriber(bug, subscribers=None):
+    """Check if bug has a subscriber matching the filter criteria.
+
+    Args:
+        bug: LP bug object
+        subscribers: List of LP usernames/team names to match (e.g., ['bullwinkle-team'])
+
+    Returns:
+        True if no filter specified (subscribers is None or empty), or
+        if any subscriber name matches an entry in subscribers list
+    """
+    if not subscribers:
+        return True  # No filter = sync all
+
+    bug_subscribers = get_bug_subscriber_names(bug)
+    return any(name in subscribers for name in bug_subscribers)
+
 
 def get_all_lp_merge_proposals(lp, project, reviewers):
     """Return list of merge proposals for the specified reviewers and project."""
@@ -378,6 +432,8 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
 
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
+        if opts.debug:
+            print(f"    Already exists: {issue.key}")
         update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run, opts.sync_unmapped_users)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
@@ -394,6 +450,8 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         sync_to_jira = True if (assignee or status) else False
 
     if not sync_to_jira:
+        if opts.debug:
+            print(f"    Skipping - bug assignee not in user_map (use sync_unmapped_users: true to override)")
         return
 
     issue_type = sync.get("issue_type", "Bug")
@@ -531,6 +589,16 @@ def main(args=None):
         help='Only query merge proposals'
     )
     opt_parser.add_argument(
+        '--subscriber',
+        dest='subscribers',
+        action='append',
+        type=str,
+        help=textwrap.dedent('''
+            Only sync bugs where specified user/team is subscribed.
+            Can be specified multiple times. If not specified, syncs all bugs.
+            ''')
+    )
+    opt_parser.add_argument(
         '--dry-run',
         dest='dry_run',
         action='store_true',
@@ -566,6 +634,8 @@ def main(args=None):
 
     # Connect to Launchpad API
     # TODO: catch exception if the Launchpad API isn't open
+    if opts.debug:
+        print("Connecting to Launchpad API...")
     snap_home = os.getenv("SNAP_USER_COMMON")
     if snap_home:
         credential_store = UnencryptedFileCredentialStore(
@@ -577,14 +647,20 @@ def main(args=None):
         'foundations',
         'production',
         version='devel', credential_store=credential_store)
+    if opts.debug:
+        print("Connected to Launchpad API")
 
     # Connect to the JIRA API
+    if opts.debug:
+        print("Connecting to JIRA API...")
     try:
         api = jira_api()
     except ValueError:
         return "ERROR: Cannot initialize JIRA API."
 
     jira = JIRA(api.server, basic_auth=(api.login, api.token))
+    if opts.debug:
+        print("Connected to JIRA API")
 
     opts.status_map = {}
     opts.user_map = {}
@@ -594,15 +670,17 @@ def main(args=None):
 
     if opts.config:
         json_config = json.load(opts.config)
-        opts.sync_project = json_config["project"]
-        opts.status_map = json_config["status_map"]
-        opts.user_map = json_config["user_map"]
+        opts.sync_project = json_config.get("project", [])
+        opts.status_map = json_config.get("status_map", {})
+        opts.user_map = json_config.get("user_map", {})
         opts.priority_map = json_config.get("priority_map", {})
         if "sync_milestone" in json_config:
             opts.sync_milestone = json_config["sync_milestone"]
         opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
+        if opts.subscribers:
+            sync_project["subscribers"] = opts.subscribers
         opts.sync_project.append(sync_project)
 
     if opts.merge_proposals:
@@ -614,13 +692,28 @@ def main(args=None):
 
     # Iterate over project list
     for sync in opts.sync_project:
+        if opts.debug:
+            print(f"Syncing bugs from {sync['launchpad_project']}")
+
         tasks_list = get_all_lp_project_bug_tasks(
             lp, sync["launchpad_project"], opts.days, opts.tags)
         if tasks_list is None:
             continue
 
+        # Get subscriber filter from config or CLI
+        subscribers = sync.get("subscribers")
+
         for bug_task in tasks_list:
             bug = bug_task.bug
+
+            # Apply subscriber filter if specified
+            if subscribers and not bug_has_matching_subscriber(bug, subscribers):
+                if opts.debug:
+                    print(f"  Skipping LP#{bug.id} - no matching subscriber")
+                continue
+
+            if opts.debug:
+                print(f"  Processing LP#{bug.id}: {bug.title}")
             lp_to_jira_bug(lp, jira, bug, sync, opts)
 
     if len(opts.sync_project) > 0:
