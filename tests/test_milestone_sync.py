@@ -283,6 +283,7 @@ def test_lp_to_jira_bug_milestone_disabled_by_default():
     opts.no_lp_tag = True
     opts.lp_link = False
     opts.sync_milestone = False  # Disabled by default
+    opts.sync_all_series = False  # Disabled by default
     opts.user_map = {}
     opts.status_map = {}
     opts.priority_map = {}

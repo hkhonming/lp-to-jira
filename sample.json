@@ -1,5 +1,6 @@
 {
   "sync_milestone": false,
+  "sync_all_series": false,
   "sync_unmapped_users": false,
   "status_map":
   {
