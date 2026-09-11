@@ -105,5 +105,5 @@ def test_sync_release_duplicate(issue):
     with patch('LpToJira.lp_to_jira_report.lp_bug', return_value=fake_lp_bug):
         assert sync_release(issue, jira, lp)
 
-    jira.transition_issue.assert_called_once_with(jira_issue, transition='Done')
+    jira.transition_issue.assert_called_once_with(jira_issue, transition='Rejected')
     assert "duplicate" in jira.add_comment.call_args[0][1].lower()

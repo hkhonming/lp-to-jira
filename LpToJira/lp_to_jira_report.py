@@ -452,24 +452,29 @@ def sync_release(issue, jira, lp):
             if not released:
                 break
 
-        if (released or duplicated) and jira_issue.fields.status.name != 'Done':
+        if duplicated and jira_issue.fields.status.name != 'Rejected':
+            print(("\n[Status Sync] - Updating {} "
+                   "status to Rejected per LP duplicate: #{}").format(
+                       jira_key, lp_id))
+            duplicate_bug = getattr(launchpad_bug.duplicate_of, "id", None)
+            comment = (
+                '{{jira-bot}} LP: #%s is marked as duplicate%s, moving '
+                'this issue to {color:#de350b}*REJECTED*{color}'
+            ) % (
+                lp_id,
+                " of LP: #%s" % duplicate_bug if duplicate_bug else ""
+            )
+            jira.add_comment(jira_issue, comment)
+            jira.transition_issue(jira_issue, transition='Rejected')
+            return True
+
+        if released and jira_issue.fields.status.name != 'Done':
             print(("\n[Status Sync] - Updating {} "
                    "status to Done per LP: #{}").format(jira_key, lp_id))
-
-            if duplicated:
-                duplicate_bug = getattr(launchpad_bug.duplicate_of, "id", None)
-                comment = (
-                    '{{jira-bot}} LP: #%s is marked as duplicate%s, moving '
-                    'this issue to {color:#36B37E}*DONE*{color}'
-                ) % (
-                    lp_id,
-                    " of LP: #%s" % duplicate_bug if duplicate_bug else ""
-                )
-            else:
-                comment = ('{{jira-bot}} Since all affected series of '
-                           'the related LP: #%s are *Fix Released,* '
-                           'moving this issue to '
-                           '{color:#36B37E}*DONE*{color}') % (lp_id)
+            comment = ('{{jira-bot}} Since all affected series of '
+                       'the related LP: #%s are *Fix Released,* '
+                       'moving this issue to '
+                       '{color:#36B37E}*DONE*{color}') % (lp_id)
             jira.add_comment(jira_issue, comment)
             jira.transition_issue(jira_issue, transition='Done')
             return True
