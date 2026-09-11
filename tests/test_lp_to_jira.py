@@ -8,6 +8,7 @@ from LpToJira.lp_to_jira import\
     get_lp_bug,\
     get_lp_bug_pkg,\
     get_lp_bug_importance,\
+    get_lp_bug_status,\
     get_all_lp_project_bug_tasks,\
     get_first_matching_assignee,\
     is_bug_in_jira,\
@@ -70,7 +71,8 @@ def test_get_lp_project_bug_tasks(lp):
     assert get_all_lp_project_bug_tasks(lp, "curtin", 5).id == 123456
 
     search_tasks_kwargs = lp.projects["curtin"].searchTasks.call_args.kwargs
-    assert "Duplicate" in search_tasks_kwargs["status"]
+    assert search_tasks_kwargs["omit_duplicates"] == False
+    assert "Duplicate" not in search_tasks_kwargs["status"]
 
 
 def test_is_bug_in_jira():
@@ -180,6 +182,21 @@ def test_get_lp_bug_importance():
     assert get_lp_bug_importance(bug) is None
 
 
+def test_get_lp_bug_status():
+    bug = Mock()
+    bug.duplicate_of_link = "https://api.launchpad.net/devel/bugs/1"
+    bug.bug_tasks = [Mock(status='Invalid')]
+    assert get_lp_bug_status(bug) == 'Duplicate'
+
+    bug = Mock()
+    bug.bug_tasks = [Mock(status='Triaged')]
+    assert get_lp_bug_status(bug) == 'Triaged'
+
+    bug = Mock()
+    bug.bug_tasks = []
+    assert get_lp_bug_status(bug) is None
+
+
 def test_build_jira_issue_with_priority_map():
     bug = Mock()
     bug.id = 1
@@ -281,7 +298,8 @@ def test_update_bug_in_jira_no_priority_map():
 def test_update_bug_in_jira_duplicate_status():
     jira = Mock()
     bug = Mock()
-    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='Duplicate')]
+    bug.duplicate_of_link = "https://api.launchpad.net/devel/bugs/1"
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='Invalid')]
 
     issue = Mock()
     issue.key = 'TEST-1'
@@ -298,7 +316,8 @@ def test_update_bug_in_jira_duplicate_status():
 def test_update_bug_in_jira_unmapped_status():
     jira = Mock()
     bug = Mock()
-    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='Duplicate')]
+    bug.duplicate_of_link = "https://api.launchpad.net/devel/bugs/1"
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='Invalid')]
 
     issue = Mock()
     issue.key = 'TEST-1'

@@ -60,6 +60,18 @@ def get_lp_bug_importance(bug):
     return None
 
 
+def get_lp_bug_status(bug):
+    """Return Launchpad bug status, including duplicate bugs."""
+    duplicate_of_link = getattr(bug, 'duplicate_of_link', None)
+    if isinstance(duplicate_of_link, str) and duplicate_of_link:
+        return 'Duplicate'
+
+    for task in bug.bug_tasks:
+        return task.status
+
+    return None
+
+
 def get_lp_bug_pkg(bug):
     """
     From a LP bug, get its package
@@ -96,12 +108,12 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
 
     bug_tasks = lp_project.searchTasks(
         modified_since=modified_since,
+        omit_duplicates=False,
         status=[
             'New',
             'Incomplete',
             'Triaged',
             'Opinion',
-            'Duplicate',
             'Invalid',
             'Won\'t Fix',
             'Confirmed',
@@ -173,17 +185,19 @@ def get_first_matching_assignee(bug, assignees, sync_unmapped_users=False):
     match is found, fall back to returning (None, first_status) so that
     unmapped users are still synced to JIRA with just the status.
     """
+    bug_status = get_lp_bug_status(bug)
+
     if len(assignees) > 0:
         for serie in bug.bug_tasks:
             if serie.assignee and (serie.assignee.name in assignees):
-                return serie.assignee.name, serie.status
+                return serie.assignee.name, bug_status or serie.status
         # Mode 3: fall back to first task's status with no assignee
         if sync_unmapped_users and bug.bug_tasks:
-            return None, bug.bug_tasks[0].status
+            return None, bug_status
     else:
         # If user_map is not defined. We still want to sync the status(first series) to JIRA
-        for serie in bug.bug_tasks:
-            return None, serie.status
+        if bug_status:
+            return None, bug_status
 
     return None, None
 
