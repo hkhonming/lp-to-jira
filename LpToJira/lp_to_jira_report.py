@@ -425,15 +425,20 @@ def sync_release(issue, jira, lp):
     jira_issue = jira.issue(issue["JIRA ID"])
 
     # automation 1: check for release status over all series and move the
-    # to Done if they are all Fix Released or Won't Fix
+    # issue to Done if they are all terminal statuses
     released = False
+    duplicated = False
 
     try:
+        launchpad_bug = lp.bugs[int(lp_id)]
+        duplicated = bool(getattr(launchpad_bug, "duplicate_of", None))
+
         # Rather than going through the status in the json DB, we go directly
         # To the LP bug and go through all the affected packages
         # and if for all the packages and all the series it is either Fix
         # Released or Won't Fix, Well then it is DONE in JIRA
         bug = lp_bug(lp_id, lp)
+        released = True
         for pkg in bug.affected_packages:
             for serie in bug.affected_series(pkg):
                 if bug.package_detail(
@@ -447,16 +452,24 @@ def sync_release(issue, jira, lp):
             if not released:
                 break
 
-        if released:
-            if jira_issue.fields.status.name != 'Done':
-                print(("\n[Status Sync] - Updating {} "
-                       "status to Done per LP: #{}").format(jira_key, lp_id))
+        if (released or duplicated) and jira_issue.fields.status.name != 'Done':
+            print(("\n[Status Sync] - Updating {} "
+                   "status to Done per LP: #{}").format(jira_key, lp_id))
 
+            if duplicated:
+                duplicate_bug = getattr(launchpad_bug.duplicate_of, "id", None)
+                comment = (
+                    '{{jira-bot}} LP: #%s is marked as duplicate%s, moving '
+                    'this issue to {color:#36B37E}*DONE*{color}'
+                ) % (
+                    lp_id,
+                    " of LP: #%s" % duplicate_bug if duplicate_bug else ""
+                )
+            else:
                 comment = ('{{jira-bot}} Since all affected series of '
                            'the related LP: #%s are *Fix Released,* '
                            'moving this issue to '
                            '{color:#36B37E}*DONE*{color}') % (lp_id)
-
             jira.add_comment(jira_issue, comment)
             jira.transition_issue(jira_issue, transition='Done')
             return True

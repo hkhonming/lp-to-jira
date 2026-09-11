@@ -1,10 +1,12 @@
 from unittest.mock import Mock
+from unittest.mock import patch
 
 
 from LpToJira.lp_to_jira_report import \
     find_issues_in_project,\
     get_bug_id,\
     merge_lp_data_with_jira_issues,\
+    sync_release,\
     sync_title
 
 
@@ -77,3 +79,31 @@ def test_merge_lp_data_with_jira_issues():
          'LaunchPad ID': '3333'}
          ]
 
+
+def test_sync_release_duplicate(issue):
+    jira = Mock()
+    jira_issue = Mock()
+    jira_issue.fields = Mock()
+    jira_issue.fields.status = Mock()
+    jira_issue.fields.status.name = "In Progress"
+    jira.issue = Mock(return_value=jira_issue)
+    jira.add_comment = Mock()
+    jira.transition_issue = Mock()
+
+    duplicate_target = Mock()
+    duplicate_target.id = 9999
+    lp_bug_obj = Mock()
+    lp_bug_obj.duplicate_of = duplicate_target
+    lp = Mock()
+    lp.bugs = {123456: lp_bug_obj}
+
+    fake_lp_bug = Mock()
+    fake_lp_bug.affected_packages = []
+    fake_lp_bug.affected_series = Mock(return_value=[])
+    fake_lp_bug.package_detail = Mock(return_value="")
+
+    with patch('LpToJira.lp_to_jira_report.lp_bug', return_value=fake_lp_bug):
+        assert sync_release(issue, jira, lp)
+
+    jira.transition_issue.assert_called_once_with(jira_issue, transition='Done')
+    assert "duplicate" in jira.add_comment.call_args[0][1].lower()
