@@ -137,4 +137,33 @@ def test_lp_to_jira_bug(lp, empty_bug):
     lp_to_jira_bug(lp, jira, empty_bug, "AA", opts)
 
 
+def test_lp_to_jira_bug_duplicate_sets_rejected(lp, empty_bug):
+    jira = Mock()
+    jira.search_issues = Mock(return_value=None)
+    jira.client_info = Mock(return_value="jira")
+    jira.create_issue = Mock(return_value=Mock(key="KEY-123", id="123"))
+    jira.add_simple_link = Mock(return_value=None)
+    jira.add_comment = Mock(return_value=None)
+    jira.transition_issue = Mock(return_value=None)
+
+    empty_bug.id = 123456
+    empty_bug.duplicate_of = Mock(id=9999)
+
+    opts = Mock(
+        label="",
+        component=None,
+        epic=None,
+        lp_link=False,
+        no_lp_tag=True
+    )
+
+    lp_to_jira_bug(lp, jira, empty_bug, "AA", opts)
+
+    jira.transition_issue.assert_called_once_with(
+        jira.create_issue.return_value,
+        transition='Rejected'
+    )
+    assert "duplicate" in jira.add_comment.call_args[0][1].lower()
+
+
 # =============================================================================

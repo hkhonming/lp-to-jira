@@ -185,6 +185,19 @@ def lp_to_jira_bug(lp, jira, bug, project_id, opts):
 
     jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
 
+    duplicate_of = getattr(bug, "duplicate_of", None)
+    if duplicate_of:
+        duplicate_id = getattr(duplicate_of, "id", None)
+        comment = (
+            '{{jira-bot}} LP: #%s is marked as duplicate%s, moving this issue '
+            'to {color:#de350b}*REJECTED*{color}'
+        ) % (
+            bug.id,
+            " of LP: #%s" % duplicate_id if duplicate_id else ""
+        )
+        jira.add_comment(jira_issue, comment)
+        jira.transition_issue(jira_issue, transition='Rejected')
+
     if opts.lp_link:
         # Add reference to the JIRA entry in the bugs on Launchpad
         bug.description += '\n\n---\nExternal link: https://warthogs.atlassian.net/browse/'+jira_issue.key
