@@ -34,7 +34,7 @@ You can also provide OAuth settings through environment variables:
 - `LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET` or `JIRA_OAUTH_CLIENT_SECRET`
 - `LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL` or `JIRA_OAUTH_TOKEN_URL` (optional, defaults to `https://auth.atlassian.com/oauth/token`)
 
-When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian and uses it as a ****** for Jira API requests.
+When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian and uses it for Jira API requests.
 
 ## Usage:
 ```

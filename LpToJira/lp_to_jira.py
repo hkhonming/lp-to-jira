@@ -37,6 +37,12 @@ pkg_to_component = {
 }
 
 
+def get_opt(opts, key, default=None):
+    if not hasattr(opts, '__dict__'):
+        return default
+    return opts.__dict__.get(key, default)
+
+
 def get_lp_bug(lp, bug_number):
     """Make sure the bug ID exists, return bug"""
 
@@ -138,9 +144,8 @@ def build_jira_issue(lp, bug, project_id, opts=None):
         'issuetype': {'name': 'Bug'}
     }
 
-    if opts and opts.component:
-        component = opts.component
-    else:
+    component = get_opt(opts, 'component')
+    if not component:
         component = pkg_to_component.get(bug_pkg)
 
     # Only add component to the JIRA issue if it there's an acual component
@@ -162,12 +167,13 @@ def create_jira_issue(jira, issue_dict, bug, opts=None):
 
     print("Created {}/browse/{}".format(jira.client_info(), new_issue.key))
 
-    if opts and opts.epic:
+    epic = get_opt(opts, 'epic')
+    if epic:
         try:
-            jira.add_issues_to_epic(opts.epic, [new_issue.id])
-            print("Added to Epic %s" % opts.epic)
+            jira.add_issues_to_epic(epic, [new_issue.id])
+            print("Added to Epic %s" % epic)
         except JIRAError as err:
-            print("Failed to add to Epic {0}:\n{1}".format(opts.epic, err))
+            print("Failed to add to Epic {0}:\n{1}".format(epic, err))
 
     return new_issue
 
@@ -179,18 +185,19 @@ def lp_to_jira_bug(lp, jira, bug, project_id, opts):
         return
 
     issue_dict = build_jira_issue(lp, bug, project_id, opts)
-    if opts.label:
+    label = get_opt(opts, 'label')
+    if label:
         # Add labels if specified
-        issue_dict["labels"] = [opts.label]
+        issue_dict["labels"] = [label]
 
     jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
 
-    if opts.lp_link:
+    if get_opt(opts, 'lp_link', False):
         # Add reference to the JIRA entry in the bugs on Launchpad
         bug.description += '\n\n---\nExternal link: https://warthogs.atlassian.net/browse/'+jira_issue.key
         bug.lp_save()
 
-    if not opts.no_lp_tag:
+    if not get_opt(opts, 'no_lp_tag', False):
         # Add reference to the JIRA entry in the bugs on Launchpad
         bug.tags += [jira_issue.key.lower()]
         bug.lp_save()
