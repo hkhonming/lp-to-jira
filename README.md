@@ -9,6 +9,33 @@ A JIRA account is required You will need to setup a JIRA token to access your se
 
 On the first launch lp-to-jira will assist you in getting your jira API token. JIRA API token can be created here: https://id.atlassian.com/manage-profile/security/api-tokens.
 
+Token-based authentication remains the default and continues to use `~/.jira.token` (or `$SNAP_USER_COMMON/.jira.token`) with:
+```json
+{
+  "jira-server": "https://your-domain.atlassian.net",
+  "jira-login": "user@example.com",
+  "jira-token": "your-api-token"
+}
+```
+
+OAuth 2.0 client credentials authentication is also supported. To use it, set `LP_TO_JIRA_JIRA_AUTH_METHOD=oauth` (or `JIRA_AUTH_METHOD=oauth`) or save `jira-auth-method` as `oauth` in `~/.jira.oauth` (or `$SNAP_USER_COMMON/.jira.oauth`):
+```json
+{
+  "jira-auth-method": "oauth",
+  "jira-server": "https://api.atlassian.com/ex/jira/<cloudId>",
+  "jira-oauth-client-id": "your-client-id",
+  "jira-oauth-client-secret": "your-client-secret"
+}
+```
+
+You can also provide OAuth settings through environment variables:
+- `LP_TO_JIRA_JIRA_SERVER` or `JIRA_SERVER`
+- `LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID` or `JIRA_OAUTH_CLIENT_ID`
+- `LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET` or `JIRA_OAUTH_CLIENT_SECRET`
+- `LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL` or `JIRA_OAUTH_TOKEN_URL` (optional, defaults to `https://auth.atlassian.com/oauth/token`)
+
+When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian and uses it as a ****** for Jira API requests.
+
 ## Usage:
 ```
 usage: lp-to-jira [-h] [-l LABEL] [-c COMPONENT] [-E EPIC] [-e] [-s SYNC_PROJECT_BUGS] [-d DAYS] [-t TAGS] [--add-link-in-lp-desc ] [--no-lp-tag] [bug] project
