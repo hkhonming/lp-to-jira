@@ -86,9 +86,10 @@ class jira_api():
         if self.server and self.login and self.token:
             return
 
-        print('JIRA Token information file {} could not be found or parsed.'.format(self.credstore))
+        print('JIRA credential information file {} could not be found or parsed.'.format(self.credstore))
         print('')
-        gather_token = input('Do you want to enter your JIRA token information now? (Y/n) ')
+        gather_token = input(
+            'Do you want to enter your JIRA credentials now? (Y/n) ')
         if gather_token == 'n':
             raise ValueError("JIRA API isn't initialized")
         self.server = self.server or input(
@@ -96,7 +97,7 @@ class jira_api():
         self.login = self.login or input(
             'Please enter your email login for JIRA : ')
         self.token = self.token or getpass.getpass(
-            'Please enter your JIRA API Token (see https://id.atlassian.com/manage-profile/security/api-tokens) : ')
+            'Please enter your JIRA credential : ')
         save_token = input('Do you want to save those credentials for future use or lp-to-jira? (Y/n) ')
         if save_token != 'n':
             try:
@@ -134,9 +135,10 @@ class jira_api():
         if self.server and self.client_id and self.client_secret:
             return
 
-        print('JIRA OAuth information file {} could not be found or parsed.'.format(self.oauth_credstore))
+        print('JIRA OAuth configuration file {} could not be found or parsed.'.format(self.oauth_credstore))
         print('')
-        gather_token = input('Do you want to enter your JIRA OAuth information now? (Y/n) ')
+        gather_token = input(
+            'Do you want to enter your JIRA OAuth configuration now? (Y/n) ')
         if gather_token == 'n':
             raise ValueError("JIRA API isn't initialized")
         self.server = self.server or input(
@@ -144,7 +146,7 @@ class jira_api():
         self.client_id = self.client_id or input(
             'Please enter your Atlassian OAuth client ID : ')
         self.client_secret = self.client_secret or getpass.getpass(
-            'Please enter your Atlassian OAuth client secret : ')
+            'Please enter your Atlassian client credential : ')
         save_token = input('Do you want to save those credentials for future use or lp-to-jira? (Y/n) ')
         if save_token != 'n':
             try:
