@@ -135,31 +135,10 @@ class jira_api():
         if self.server and self.client_id and self.client_secret:
             return
 
-        print('JIRA OAuth configuration file {} could not be found or parsed.'.format(self.oauth_credstore))
-        print('')
-        gather_token = input(
-            'Do you want to enter your JIRA OAuth configuration now? (Y/n) ')
-        if gather_token == 'n':
-            raise ValueError("JIRA API isn't initialized")
-        self.server = self.server or input(
-            'Please enter your jira server address : ')
-        self.client_id = self.client_id or input(
-            'Please enter your Atlassian OAuth client ID : ')
-        self.client_secret = self.client_secret or getpass.getpass(
-            'Please enter your Atlassian client credential : ')
-        save_token = input('Do you want to save those credentials for future use or lp-to-jira? (Y/n) ')
-        if save_token != 'n':
-            try:
-                data = {}
-                data['jira-server'] = self.server
-                data['jira-auth-method'] = 'oauth'
-                data['jira-oauth-client-id'] = self.client_id
-                data['jira-oauth-client-secret'] = self.client_secret
-                data['jira-oauth-token-url'] = self.token_url
-                with open(self.oauth_credstore, 'w+') as f:
-                    json.dump(data, f)
-            except (FileNotFoundError, json.JSONDecodeError):
-                raise ValueError("JIRA API isn't initialized")
+        raise ValueError(
+            "JIRA OAuth configuration is incomplete. "
+            "Set OAuth credentials with environment variables or {}.".format(
+                self.oauth_credstore))
 
     def get_jira_client_kwargs(self):
         if self.auth_method == 'oauth':
