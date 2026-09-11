@@ -4,6 +4,7 @@
 
 import os
 import json
+import getpass
 
 from jira import JIRA
 import requests
@@ -94,7 +95,7 @@ class jira_api():
             'Please enter your jira server address : ')
         self.login = self.login or input(
             'Please enter your email login for JIRA : ')
-        self.token = self.token or input(
+        self.token = self.token or getpass.getpass(
             'Please enter your JIRA API Token (see https://id.atlassian.com/manage-profile/security/api-tokens) : ')
         save_token = input('Do you want to save those credentials for future use or lp-to-jira? (Y/n) ')
         if save_token != 'n':
@@ -142,7 +143,7 @@ class jira_api():
             'Please enter your jira server address : ')
         self.client_id = self.client_id or input(
             'Please enter your Atlassian OAuth client ID : ')
-        self.client_secret = self.client_secret or input(
+        self.client_secret = self.client_secret or getpass.getpass(
             'Please enter your Atlassian OAuth client secret : ')
         save_token = input('Do you want to save those credentials for future use or lp-to-jira? (Y/n) ')
         if save_token != 'n':
