@@ -101,6 +101,7 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
             'Incomplete',
             'Triaged',
             'Opinion',
+            'Duplicate',
             'Invalid',
             'Won\'t Fix',
             'Confirmed',
@@ -193,7 +194,7 @@ def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, priori
 
     assignee, status = get_first_matching_assignee(bug, assignees, sync_unmapped_users)
     if status:
-        status = status_map[status]
+        status = status_map.get(status)
 
     lp_state = { "assignee": user_map.get(assignee, None), "status": status }
     jira_assignee = issue.fields.assignee.accountId if issue.fields.assignee else None

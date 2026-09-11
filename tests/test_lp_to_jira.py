@@ -69,6 +69,9 @@ def test_get_lp_project_bug_tasks(lp):
     # project curtin exists and has a bug
     assert get_all_lp_project_bug_tasks(lp, "curtin", 5).id == 123456
 
+    search_tasks_kwargs = lp.projects["curtin"].searchTasks.call_args.kwargs
+    assert "Duplicate" in search_tasks_kwargs["status"]
+
 
 def test_is_bug_in_jira():
     jira = Mock()
@@ -273,6 +276,38 @@ def test_update_bug_in_jira_no_priority_map():
 
     update_bug_in_jira(jira, bug, issue, [], {}, status_map)
     issue.update.assert_not_called()
+
+
+def test_update_bug_in_jira_duplicate_status():
+    jira = Mock()
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='Duplicate')]
+
+    issue = Mock()
+    issue.key = 'TEST-1'
+    issue.fields.assignee = None
+    issue.fields.status.name = 'To Do'
+    issue.fields.priority.name = 'Medium'
+
+    status_map = {'Duplicate': 'Done'}
+
+    update_bug_in_jira(jira, bug, issue, [], {}, status_map)
+    jira.transition_issue.assert_called_once_with(issue, transition='Done')
+
+
+def test_update_bug_in_jira_unmapped_status():
+    jira = Mock()
+    bug = Mock()
+    bug.bug_tasks = [Mock(importance='Critical', assignee=None, status='Duplicate')]
+
+    issue = Mock()
+    issue.key = 'TEST-1'
+    issue.fields.assignee = None
+    issue.fields.status.name = 'To Do'
+    issue.fields.priority.name = 'Medium'
+
+    update_bug_in_jira(jira, bug, issue, [], {}, {})
+    jira.transition_issue.assert_not_called()
 
 
 def test_get_first_matching_assignee_mode1_match():
