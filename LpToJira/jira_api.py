@@ -88,11 +88,7 @@ class jira_api():
                 self.oauth['signature_method'] = config['signature_method']
             return
 
-        print(
-            'JIRA OAuth information file {} could not be found, parsed, or completed from the environment.'.format(
-                self.oauthstore
-            )
-        )
+        print('JIRA OAuth credentials could not be loaded from file or environment.')
         print('')
         gather_oauth = input('Do you want to enter your JIRA OAuth information now? (Y/n) ')
         if gather_oauth == 'n':
