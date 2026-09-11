@@ -584,7 +584,7 @@ def main(args=None):
     except ValueError:
         return "ERROR: Cannot initialize JIRA API."
 
-    jira = JIRA(api.server, basic_auth=(api.login, api.token))
+    jira = JIRA(api.server, **api.get_jira_client_kwargs())
 
     opts.status_map = {}
     opts.user_map = {}
