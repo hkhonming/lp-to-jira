@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from launchpadlib.launchpad import Launchpad
 from launchpadlib.credentials import UnencryptedFileCredentialStore
 
-from jira import JIRA, JIRAError
+from jira import JIRAError
 from LpToJira.jira_api import jira_api
 
 # TODO: paramaterize this, for now we just hardcode
@@ -616,7 +616,7 @@ def main(args=None):
     except ValueError:
         return "ERROR: Cannot initialize JIRA API."
 
-    jira = JIRA(api.server, basic_auth=(api.login, api.token))
+    jira = api.create_client()
 
     opts.status_map = {}
     opts.user_map = {}
