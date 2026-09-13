@@ -368,6 +368,34 @@ def create_jira_issue(jira, issue_dict, bug, opts=None):
     return new_issue
 
 
+def sync_duplicate_to_jira(jira, bug, jira_issue, dry_run=False):
+    """Transition Jira issue to Rejected when Launchpad bug is marked duplicate."""
+
+    duplicate_of = getattr(bug, "duplicate_of", None)
+    if not duplicate_of:
+        return False
+
+    duplicate_id = getattr(duplicate_of, "id", None)
+    comment = (
+        '{{jira-bot}} LP: #%s is marked as duplicate%s, moving this issue '
+        'to {color:#de350b}*REJECTED*{color}'
+    ) % (
+        bug.id,
+        " of LP: #%s" % duplicate_id if duplicate_id else ""
+    )
+
+    if dry_run:
+        print("(dry-run) {}".format(comment))
+        return True
+
+    status_name = getattr(getattr(getattr(jira_issue, "fields", None), "status", None), "name", None)
+    if status_name != 'Rejected':
+        jira.add_comment(jira_issue, comment)
+        jira.transition_issue(jira_issue, transition='Rejected')
+
+    return True
+
+
 def lp_to_jira_bug(lp, jira, bug, sync, opts):
     """Create JIRA issue at project_id for a given Launchpad bug"""
 
@@ -379,6 +407,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
     exists, issue = is_bug_in_jira(jira, bug, project_id)
     if exists:
         update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run, opts.sync_unmapped_users)
+        sync_duplicate_to_jira(jira, bug, issue, opts.dry_run)
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
@@ -403,6 +432,7 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         # Add labels if specified
         issue_dict["labels"] = [opts.label]
 
+    jira_issue = None
     if opts.dry_run:
         print("(dry-run) Creating JIRA issue {}".format(issue_dict))
         # Check for milestone in dry-run mode if enabled
@@ -415,6 +445,8 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run, opts.debug)
+
+    sync_duplicate_to_jira(jira, bug, jira_issue, opts.dry_run)
 
     if opts.lp_link:
        if opts.dry_run:
