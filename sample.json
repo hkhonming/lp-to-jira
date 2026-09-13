@@ -1,0 +1,54 @@
+{
+  "sync_milestone": false,
+  "sync_unmapped_users": false,
+  "status_map":
+  {
+    "New": "To Do",
+    "Incomplete": "To Do",
+    "Triaged": "To Do",
+    "Opinion": "To Do",
+    "Invalid": "Done",
+    "Won't Fix": "Done",
+    "Confirmed": "In Progress",
+    "In Progress": "In Progress",
+    "Fix Committed": "Done",
+    "Fix Released": "Done"
+  },
+  "priority_map":
+  {
+    "Critical": "Highest",
+    "High": "High",
+    "Medium": "Medium",
+    "Low": "Low",
+    "Wishlist": "Lowest",
+    "Undecided": "Medium",
+    "Unknown": "Medium"
+  },
+  "user_map":
+  {
+    "userid00": "deadbeef01",
+    "userid01": "deadbeef02",
+    "userid03": "deadbeef03"
+  },
+  "project":
+    [
+      {
+        "launchpad_project": "nosuchlpproject01",
+        "jira_project": "JIRAPROJECTKEY01",
+        "issue_type" : "Bug",
+        "component": "jiracomponent01"
+      },
+      {
+        "launchpad_project": "nosuchlpproject02",
+        "jira_project": "JIRAPROJECTKEY02",
+        "issue_type" : "Bug",
+        "component": "jiracomponent02"
+      },
+      {
+        "launchpad_project": "nosuchlpproject03",
+        "jira_project": "JIRAPROJECTKEY03",
+        "issue_type" : "Bug",
+        "component": "jiracomponent03"
+      }
+    ]
+}

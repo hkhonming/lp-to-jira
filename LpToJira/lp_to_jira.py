@@ -3,8 +3,9 @@
 # create a new Entry in JIRA in a given project
 
 
-import os
 import argparse
+import json
+import os
 import textwrap
 
 from datetime import datetime, timedelta
@@ -14,7 +15,6 @@ from launchpadlib.credentials import UnencryptedFileCredentialStore
 
 from jira import JIRA, JIRAError
 from LpToJira.jira_api import jira_api
-
 
 # TODO: paramaterize this, for now we just hardcode
 pkg_to_component = {
@@ -36,7 +36,6 @@ pkg_to_component = {
     "fce-templates": "FCE Templates",
 }
 
-
 def get_lp_bug(lp, bug_number):
     """Make sure the bug ID exists, return bug"""
 
@@ -52,6 +51,13 @@ def get_lp_bug(lp, bug_number):
         print("Couldn't find the Launchpad bug {}".format(bug_number))
 
     return bug
+
+
+def get_lp_bug_importance(bug):
+    """Return the importance of the first bug task, or None if unavailable"""
+    for task in bug.bug_tasks:
+        return task.importance
+    return None
 
 
 def get_lp_bug_pkg(bug):
@@ -83,13 +89,13 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
         print("Couldn't find the Launchpad project \"{}\"".format(project))
         return None
 
-    created_since = None
+    modified_since = None
 
     if days:
-        created_since = (datetime.now() - timedelta(days)).strftime('%Y-%m-%d')
+        modified_since = (datetime.now() - timedelta(days)).strftime('%Y-%m-%d')
 
     bug_tasks = lp_project.searchTasks(
-        created_since=created_since,
+        modified_since=modified_since,
         status=[
             'New',
             'Incomplete',
@@ -101,30 +107,218 @@ def get_all_lp_project_bug_tasks(lp, project, days=None, tags=None):
             'In Progress',
             'Fix Committed',
             'Fix Released'
-        ],
-        tags=tags
+        ]
     )
 
     return bug_tasks
 
+def get_all_lp_merge_proposals(lp, project, reviewers):
+    """Return list of merge proposals for the specified reviewers and project."""
+
+    lp_user = lp.people["cjwatson"]
+    print(lp_user)
+
+    for b in lp_user.getBranches():
+        print(b)
+
+    return None
+
+    merge_proposals = []
+
+    try:
+        lp_project = lp.projects[project]
+    except KeyError:
+        print("Couldn't find the Launchpad project \"{}\"".format(project))
+        return None
+
+    mps = lp_project.getMergeProposals(
+        status=[
+            'Work in progress',
+            'Needs review',
+            'Approved',
+            'Merged',
+            'Code failed to merge',
+            'Queued',
+            'Superseded'
+            ]
+        )
+
+    for mp in mps:
+        for vote in mp.votes_collection:
+            if vote.reviewer.name in reviewers:
+                print(project, mp, mp.queue_status, vote.reviewer.name)
+
+    return None
 
 def is_bug_in_jira(jira, bug, project_id):
     """Checks Jira for the same ID as the Bug you're trying to import"""
 
-    existing_issue = jira.search_issues(
+    issues = jira.search_issues(
         "project = \"{}\" AND summary ~ \"LP#{}\"".format(project_id, bug.id))
 
-    if existing_issue:
+    if issues:
         print("Launchpad Issue {} is already logged "
               "in JIRA here {}/browse/{}".format(
                   bug.id,
                   jira.client_info(),
-                  existing_issue[0].key))
-        return True
-    return False
+                  issues[0].key))
+        return True, issues[0]
+    return False, None
+
+def get_first_matching_assignee(bug, assignees, sync_unmapped_users=False):
+    """Return the first assignee and status matching an entry in assignees.
+
+    If sync_unmapped_users is True and user_map is supplied but no assignee
+    match is found, fall back to returning (None, first_status) so that
+    unmapped users are still synced to JIRA with just the status.
+    """
+    if len(assignees) > 0:
+        for serie in bug.bug_tasks:
+            if serie.assignee and (serie.assignee.name in assignees):
+                return serie.assignee.name, serie.status
+        # Mode 3: fall back to first task's status with no assignee
+        if sync_unmapped_users and bug.bug_tasks:
+            return None, bug.bug_tasks[0].status
+    else:
+        # If user_map is not defined. We still want to sync the status(first series) to JIRA
+        for serie in bug.bug_tasks:
+            return None, serie.status
+
+    return None, None
 
 
-def build_jira_issue(lp, bug, project_id, opts=None):
+
+def update_bug_in_jira(jira, bug, issue, assignees, user_map, status_map, priority_map=None, dry_run=False, sync_unmapped_users=False):
+    """Update Jira status fields from Launchpad Bug"""
+
+    assignee, status = get_first_matching_assignee(bug, assignees, sync_unmapped_users)
+    if status:
+        status = status_map[status]
+
+    lp_state = { "assignee": user_map.get(assignee, None), "status": status }
+    jira_assignee = issue.fields.assignee.accountId if issue.fields.assignee else None
+    jira_state = { "assignee": jira_assignee, "status": issue.fields.status.name }
+
+    metas = ["status", "assignee"]
+    for meta in metas:
+        # Only change metafield if valid or mapped
+        if lp_state[meta] and (lp_state[meta] != jira_state[meta]):
+            print("Updating {} {} from {} -> {}".format(issue.key, meta, jira_state[meta], lp_state[meta]))
+
+            if not dry_run:
+                if meta == "status":
+                    jira.transition_issue(issue, transition=status)
+                elif meta == "assignee":
+                    fields = {"assignee": {"accountId": lp_state["assignee"]}}
+                    issue.update(fields=fields)
+
+    # Sync LP importance to JIRA priority if priority_map is configured
+    if priority_map:
+        importance = get_lp_bug_importance(bug)
+        if importance and importance in priority_map:
+            lp_priority = priority_map[importance]
+            jira_priority = issue.fields.priority.name if issue.fields.priority else None
+            if lp_priority != jira_priority:
+                print("Updating {} priority from {} -> {}".format(
+                    issue.key, jira_priority, lp_priority))
+                if not dry_run:
+                    issue.update(fields={"priority": {"name": lp_priority}})
+
+
+def get_lp_bug_milestone(bug):
+    """
+    Extract milestone from a Launchpad bug.
+    Returns the milestone name if found, None otherwise.
+    """
+    milestone = None
+    
+    # Check bug tasks for milestone information
+    for task in bug.bug_tasks:
+        if hasattr(task, 'milestone') and task.milestone:
+            # Get milestone name
+            milestone = task.milestone.name
+            break
+    
+    return milestone
+
+
+def ensure_jira_version(jira, project_id, version_name, dry_run=False):
+    """
+    Ensure a JIRA version/release exists in the project.
+    Creates it if it doesn't exist.
+    Returns the version object or None.
+    """
+    if not version_name:
+        return None
+    
+    try:
+        # Check if version already exists
+        existing_version = jira.get_project_version_by_name(project_id, version_name)
+        if existing_version:
+            return existing_version
+    except Exception:
+        # Version doesn't exist, we'll create it
+        pass
+    
+    # Create the version if it doesn't exist
+    if dry_run:
+        print(f"(dry-run) Would create JIRA version '{version_name}' in project {project_id}")
+        return None
+    else:
+        try:
+            new_version = jira.create_version(
+                name=version_name,
+                project=project_id,
+                description=f"Synced from Launchpad milestone: {version_name}"
+            )
+            print(f"Created JIRA version '{version_name}' in project {project_id}")
+            return new_version
+        except Exception as e:
+            print(f"Failed to create JIRA version '{version_name}': {e}")
+            return None
+
+
+def sync_milestone_to_jira(jira, bug, issue, project_id, dry_run=False, debug=False):
+    """
+    Sync Launchpad milestone to JIRA fixVersion.
+    Creates the version in JIRA if it doesn't exist.
+    """
+    milestone_name = get_lp_bug_milestone(bug)
+    
+    if not milestone_name:
+        # No milestone to sync
+        return
+    
+    # Ensure the version exists in JIRA
+    jira_version = ensure_jira_version(jira, project_id, milestone_name, dry_run)
+    
+    if jira_version and not dry_run:
+        try:
+            # Get current fix versions
+            current_versions = issue.fields.fixVersions if hasattr(issue.fields, 'fixVersions') else []
+            current_version_names = [v.name for v in current_versions]
+            
+            # Debug: print current_versions to trace JSON serialization issue
+            if debug:
+                print(f"DEBUG: current_versions = {current_versions}")
+                print(f"DEBUG: current_versions type = {type(current_versions)}")
+                if current_versions:
+                    print(f"DEBUG: first version type = {type(current_versions[0])}")
+            
+            if milestone_name in current_version_names:
+                # Milestone already set; nothing to update
+                return
+            
+            new_versions = [{'name': milestone_name}]
+            issue.update(fields={'fixVersions': new_versions})
+            print(f"Updated {issue.key} with milestone '{milestone_name}'")
+        except Exception as e:
+            print(f"Failed to update {issue.key} with milestone '{milestone_name}': {e}")
+    elif dry_run and milestone_name:
+        print(f"(dry-run) Would update {issue.key} with milestone '{milestone_name}'")
+
+
+def build_jira_issue(lp, bug, project_id, issue_type, assignee, component, opts=None):
     """Builds and return a dict to create a Jira Issue from"""
 
     # Get bug info from LP
@@ -135,17 +329,19 @@ def build_jira_issue(lp, bug, project_id, opts=None):
         'project': project_id,
         'summary': 'LP#{} [{}] {}'.format(bug.id, bug_pkg, bug.title),
         'description': bug.description,
-        'issuetype': {'name': 'Bug'}
+        'assignee': { 'accountId': opts.user_map[assignee] if assignee else None},
+        'issuetype': {'name': issue_type}
     }
-
-    if opts and opts.component:
-        component = opts.component
-    else:
-        component = pkg_to_component.get(bug_pkg)
 
     # Only add component to the JIRA issue if it there's an acual component
     if component:
         issue_dict["components"] = [{"name": component}]
+
+    # Map LP importance to JIRA priority if priority_map is configured
+    if opts and opts.priority_map:
+        importance = get_lp_bug_importance(bug)
+        if importance and importance in opts.priority_map:
+            issue_dict['priority'] = {'name': opts.priority_map[importance]}
 
     return issue_dict
 
@@ -172,41 +368,82 @@ def create_jira_issue(jira, issue_dict, bug, opts=None):
     return new_issue
 
 
-def lp_to_jira_bug(lp, jira, bug, project_id, opts):
+def lp_to_jira_bug(lp, jira, bug, sync, opts):
     """Create JIRA issue at project_id for a given Launchpad bug"""
 
-    if is_bug_in_jira(jira, bug, project_id):
+    project_id = sync["jira_project"]
+    assignees = list(opts.user_map.keys())
+    assignee = None
+    status = None
+
+    exists, issue = is_bug_in_jira(jira, bug, project_id)
+    if exists:
+        update_bug_in_jira(jira, bug, issue, assignees, opts.user_map, opts.status_map, opts.priority_map, opts.dry_run, opts.sync_unmapped_users)
+        # Sync milestone to JIRA version if enabled
+        if opts.sync_milestone:
+            sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
         return
 
-    issue_dict = build_jira_issue(lp, bug, project_id, opts)
+    sync_to_jira = False
+
+    if len(assignees) == 0:
+        # If no assignees specified, sync everything
+        sync_to_jira = True
+    else:
+        assignee, status = get_first_matching_assignee(bug, assignees, opts.sync_unmapped_users)
+        sync_to_jira = True if (assignee or status) else False
+
+    if not sync_to_jira:
+        return
+
+    issue_type = sync.get("issue_type", "Bug")
+    component = sync.get("component", None)
+    issue_dict = build_jira_issue(lp, bug, project_id, issue_type, assignee, component, opts)
     if opts.label:
         # Add labels if specified
         issue_dict["labels"] = [opts.label]
 
-    jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
+    if opts.dry_run:
+        print("(dry-run) Creating JIRA issue {}".format(issue_dict))
+        # Check for milestone in dry-run mode if enabled
+        if opts.sync_milestone:
+            milestone_name = get_lp_bug_milestone(bug)
+            if milestone_name:
+                print(f"(dry-run) Would sync milestone '{milestone_name}' to JIRA")
+    else:
+        jira_issue = create_jira_issue(jira, issue_dict, bug, opts)
+        # Sync milestone to JIRA version if enabled
+        if opts.sync_milestone:
+            sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run, opts.debug)
 
-    duplicate_of = getattr(bug, "duplicate_of", None)
-    if duplicate_of:
-        duplicate_id = getattr(duplicate_of, "id", None)
-        comment = (
-            '{{jira-bot}} LP: #%s is marked as duplicate%s, moving this issue '
-            'to {color:#de350b}*REJECTED*{color}'
-        ) % (
-            bug.id,
-            " of LP: #%s" % duplicate_id if duplicate_id else ""
-        )
-        jira.add_comment(jira_issue, comment)
-        jira.transition_issue(jira_issue, transition='Rejected')
+        duplicate_of = getattr(bug, "duplicate_of", None)
+        if duplicate_of:
+            duplicate_id = getattr(duplicate_of, "id", None)
+            comment = (
+                '{{jira-bot}} LP: #%s is marked as duplicate%s, moving this issue '
+                'to {color:#de350b}*REJECTED*{color}'
+            ) % (
+                bug.id,
+                " of LP: #%s" % duplicate_id if duplicate_id else ""
+            )
+            jira.add_comment(jira_issue, comment)
+            jira.transition_issue(jira_issue, transition='Rejected')
 
     if opts.lp_link:
-        # Add reference to the JIRA entry in the bugs on Launchpad
-        bug.description += '\n\n---\nExternal link: https://warthogs.atlassian.net/browse/'+jira_issue.key
-        bug.lp_save()
+       if opts.dry_run:
+           print("(dry-run) Adding JIRA issue link to bug description")
+       else:
+           # Add reference to the JIRA entry in the bugs on Launchpad
+           bug.description += '\n\n---\nExternal link: https://warthogs.atlassian.net/browse/'+str(jira_issue.key)
+           bug.lp_save()
 
     if not opts.no_lp_tag:
-        # Add reference to the JIRA entry in the bugs on Launchpad
-        bug.tags += [jira_issue.key.lower()]
-        bug.lp_save()
+        if opts.dry_run:
+            print("(dry-run) Adding JIRA issue ID to bug tags")
+        else:
+            # Add reference to the JIRA entry in the bugs on Launchpad
+            bug.tags += [jira_issue.key.lower()]
+            bug.lp_save()
 
 def main(args=None):
     opt_parser = argparse.ArgumentParser(
@@ -222,6 +459,7 @@ def main(args=None):
             lp-to-jira -s ubuntu -t go-to-jira PR
             lp-to-jira -s ubuntu -t go-to-jira -t also-to-jira PR
             lp-to-jira -s ubuntu -t=-ignore-these PR
+            lp-to-jira --sync-milestone 3215487 FR
         ''')
     )
     opt_parser.add_argument(
@@ -233,6 +471,7 @@ def main(args=None):
         help="The Launchpad numeric bug ID")
     opt_parser.add_argument(
         'project', type=str,
+        nargs='?',
         help="The JIRA project string key")
     opt_parser.add_argument(
         '-l',
@@ -298,12 +537,44 @@ def main(args=None):
         action='store_true',
         help='Do not add tag to LP Bug'
     )
+    opt_parser.add_argument(
+        '--merge-proposals',
+        dest='merge_proposals',
+        action='store_true',
+        help='Only query merge proposals'
+    )
+    opt_parser.add_argument(
+        '--dry-run',
+        dest='dry_run',
+        action='store_true',
+        default=False,
+        help='Dry run, make no changes'
+    )
+    opt_parser.add_argument(
+            '--config-json',
+            dest='config',
+            type=argparse.FileType('r'),
+            help='JSON configuration file')
+    opt_parser.add_argument(
+        '--sync-milestone',
+        dest='sync_milestone',
+        action='store_true',
+        default=False,
+        help='Sync Launchpad milestones to JIRA fix versions'
+    )
+    opt_parser.add_argument(
+        '--debug',
+        dest='debug',
+        action='store_true',
+        default=False,
+        help='Enable debug output messages'
+    )
 
     opts = opt_parser.parse_args(args)
 
-    if (opts.bug == 0 and not opts.sync_project_bugs):
+    if (opts.bug == 0 and not opts.sync_project_bugs and not opts.config):
         opt_parser.print_usage()
-        print('lp-to-jira: error: the follow argument is required: bug')
+        print('lp-to-jira: error: the follow argument is required: bug or config-json')
         return 1
 
     # Connect to Launchpad API
@@ -328,19 +599,50 @@ def main(args=None):
 
     jira = JIRA(api.server, basic_auth=(api.login, api.token))
 
-    if opts.sync_project_bugs:
+    opts.status_map = {}
+    opts.user_map = {}
+    opts.priority_map = {}
+    opts.sync_project = []
+    opts.sync_unmapped_users = False
+
+    if opts.config:
+        json_config = json.load(opts.config)
+        opts.sync_project = json_config["project"]
+        opts.status_map = json_config["status_map"]
+        opts.user_map = json_config["user_map"]
+        opts.priority_map = json_config.get("priority_map", {})
+        if "sync_milestone" in json_config:
+            opts.sync_milestone = json_config["sync_milestone"]
+        opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
+    elif opts.sync_project_bugs:
+        sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
+        opts.sync_project.append(sync_project)
+
+    if opts.merge_proposals:
+        reviewers = list(opts.user_map.keys())
+        for project in opts.sync_project:
+            merge_proposals = get_all_lp_merge_proposals(lp, project["launchpad_project"], reviewers)
+
+        return 0
+
+    # Iterate over project list
+    for sync in opts.sync_project:
         tasks_list = get_all_lp_project_bug_tasks(
-            lp, opts.sync_project_bugs, opts.days, opts.tags)
+            lp, sync["launchpad_project"], opts.days, opts.tags)
         if tasks_list is None:
-            return 1
+            continue
 
         for bug_task in tasks_list:
             bug = bug_task.bug
-            lp_to_jira_bug(lp, jira, bug, opts.project, opts)
+            lp_to_jira_bug(lp, jira, bug, sync, opts)
+
+    if len(opts.sync_project) > 0:
+        # Stop here if any project sync was specified
         return 0
 
     bug_number = opts.bug
     project_id = opts.project
+    config = {"jira_project": project_id}
 
     bug = get_lp_bug(lp, bug_number)
     if bug is None:
@@ -355,6 +657,9 @@ def main(args=None):
         return 1
 
     # Create the Jira Issue
-    lp_to_jira_bug(lp, jira, bug, project_id, opts)
+    lp_to_jira_bug(lp, jira, bug, config, opts)
 
     return 0
+
+if __name__ == "__main__":
+    main()
