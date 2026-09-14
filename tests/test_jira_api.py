@@ -73,6 +73,7 @@ def test_jira_api_create_client_uses_oauth_config(tmp_path, monkeypatch):
             'client_id': 'oauth-client-id',
             'client_secret': 'oauth-client-secret',
             'grant_type': 'client_credentials',
+            'audience': 'api.atlassian.com',
         },
         timeout=30,
     )

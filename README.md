@@ -28,6 +28,12 @@ OAuth 2.0 client credentials authentication is also supported. To use it, set `L
 }
 ```
 
+OAuth setup requirements:
+- Create Atlassian OAuth client-credentials access for `api.atlassian.com`
+- lp-to-jira requests the token with the required `audience=api.atlassian.com`
+- Set `jira-server` / `JIRA_SERVER` to your Jira site URL such as `https://your-domain.atlassian.net`
+- That site URL must match one of the URLs returned by Atlassian accessible resources for the service account
+
 You can also provide OAuth settings through environment variables:
 - `LP_TO_JIRA_JIRA_SERVER` or `JIRA_SERVER`
 - `JIRA_CLIENT_ID` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID` or `JIRA_OAUTH_CLIENT_ID`

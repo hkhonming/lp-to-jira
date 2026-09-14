@@ -174,6 +174,7 @@ class jira_api():
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
                 'grant_type': 'client_credentials',
+                'audience': 'api.atlassian.com',
             },
             timeout=REQUEST_TIMEOUT,
         )
