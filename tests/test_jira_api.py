@@ -166,6 +166,53 @@ def test_jira_api_caches_oauth_access_data(tmp_path, monkeypatch):
     assert get.call_count == 1
 
 
+def test_jira_api_refreshes_expired_oauth_access_data(tmp_path, monkeypatch):
+    oauth_file = tmp_path / ".jira.oauth"
+    oauth_file.write_text(json.dumps({
+        'jira-auth-method': 'oauth',
+        'jira-server': 'https://jira.example.com',
+        'jira-oauth-client-id': 'oauth-client-id',
+        'jira-oauth-client-secret': 'oauth-client-secret',
+    }))
+
+    token_response_1 = Mock()
+    token_response_1.json = Mock(return_value={
+        'access_token': 'expired-token',
+        'expires_in': 1,
+    })
+    token_response_1.raise_for_status = Mock()
+    token_response_2 = Mock()
+    token_response_2.json = Mock(return_value={
+        'access_token': 'fresh-token',
+        'expires_in': 3600,
+    })
+    token_response_2.raise_for_status = Mock()
+    resources_response = Mock()
+    resources_response.json = Mock(return_value=[{
+        'url': 'https://jira.example.com',
+        'id': 'cloud-id',
+    }])
+    resources_response.raise_for_status = Mock()
+
+    jira_client = Mock(return_value='jira-client')
+    post = Mock(side_effect=[token_response_1, token_response_2])
+    get = Mock(return_value=resources_response)
+    monkeypatch.setattr(jira_api_module.requests, 'post', post)
+    monkeypatch.setattr(jira_api_module.requests, 'get', get)
+    monkeypatch.setattr(jira_api_module, 'JIRA', jira_client)
+    monkeypatch.delenv('SNAP_USER_COMMON', raising=False)
+
+    api = jira_api_module.jira_api(
+        credstore=str(tmp_path / ".jira.token"),
+        oauth_credstore=str(oauth_file))
+
+    assert api.create_client() == 'jira-client'
+    api.oauth_access_data['expires_at'] = 0
+    assert api.create_client() == 'jira-client'
+    assert post.call_count == 2
+    assert get.call_count == 2
+
+
 def test_jira_api_rejects_mismatched_cloud_id(tmp_path, monkeypatch):
     oauth_file = tmp_path / ".jira.oauth"
     oauth_file.write_text(json.dumps({

@@ -6,6 +6,7 @@ import os
 import json
 import getpass
 import time
+import threading
 
 from jira import JIRA
 import requests
@@ -43,6 +44,7 @@ class jira_api():
         self.cloud_id = None
         self.token_url = 'https://auth.atlassian.com/oauth/token'
         self.oauth_access_data = None
+        self.oauth_access_data_lock = threading.Lock()
 
         if self.auth_method == 'token':
             self._load_token_auth()
@@ -162,50 +164,57 @@ class jira_api():
         return {'basic_auth': (self.login, self.token)}
 
     def get_oauth_access_data(self):
-        if self.oauth_access_data:
-            expires_at = self.oauth_access_data.get('expires_at', 0)
-            if expires_at > time.time():
+        if self._has_valid_oauth_access_data():
+            return self.oauth_access_data
+
+        with self.oauth_access_data_lock:
+            if self._has_valid_oauth_access_data():
                 return self.oauth_access_data
 
-        response = requests.post(
-            self.token_url,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            data={
-                'client_id': self.client_id,
-                'client_secret': self.client_secret,
-                'grant_type': 'client_credentials',
-                'audience': 'api.atlassian.com',
-            },
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        token = payload.get('access_token')
-        if not token:
-            raise ValueError('No OAuth access token returned by Atlassian')
-        expires_in = payload.get('expires_in', 0)
+            response = requests.post(
+                self.token_url,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                data={
+                    'client_id': self.client_id,
+                    'client_secret': self.client_secret,
+                    'grant_type': 'client_credentials',
+                    'audience': 'api.atlassian.com',
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            token = payload.get('access_token')
+            if not token:
+                raise ValueError('No OAuth access token returned by Atlassian')
+            expires_in = payload.get('expires_in', 0)
 
-        resources = requests.get(
-            ATLASSIAN_ACCESSIBLE_RESOURCES_URL,
-            headers={
-                'Authorization': ''.join(['Bearer ', token]),
-                'Accept': 'application/json',
-            },
-            timeout=REQUEST_TIMEOUT,
-        )
-        resources.raise_for_status()
-        cloud_ids = {
-            resource['url'].rstrip('/'): resource['id']
-            for resource in resources.json()
-            if resource.get('url') and resource.get('id')
-        }
+            resources = requests.get(
+                ATLASSIAN_ACCESSIBLE_RESOURCES_URL,
+                headers={
+                    'Authorization': ''.join(['Bearer ', token]),
+                    'Accept': 'application/json',
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
+            resources.raise_for_status()
+            cloud_ids = {
+                resource['url'].rstrip('/'): resource['id']
+                for resource in resources.json()
+                if resource.get('url') and resource.get('id')
+            }
 
-        self.oauth_access_data = {
-            'token': token,
-            'cloud_ids': cloud_ids,
-            'expires_at': time.time() + max(0, expires_in - 60),
-        }
-        return self.oauth_access_data
+            self.oauth_access_data = {
+                'token': token,
+                'cloud_ids': cloud_ids,
+                'expires_at': time.time() + max(0, expires_in - 60),
+            }
+            return self.oauth_access_data
+
+    def _has_valid_oauth_access_data(self):
+        if not self.oauth_access_data:
+            return False
+        return self.oauth_access_data.get('expires_at', 0) > time.time()
 
     def get_oauth_server(self, auth):
         if self.server and self.server.startswith(ATLASSIAN_EX_JIRA_PREFIX):
