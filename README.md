@@ -5,7 +5,7 @@ Python helper script that create a new JIRA bug entry from an existing Launchpad
 lp-to-jira will access [Launchpad](https://launchpad.net/) as an anonymous user for now so private bug might not be visible.
 
 ## JIRA
-A JIRA account is required You will need to setup a JIRA token to access your server.
+A JIRA account is required. You will need to set up a JIRA token to access your server.
 
 On the first launch lp-to-jira will assist you in getting your jira API token. JIRA API token can be created here: https://id.atlassian.com/manage-profile/security/api-tokens.
 

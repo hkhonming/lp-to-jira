@@ -242,3 +242,40 @@ def test_jira_api_accepts_matching_cloud_id_override(tmp_path, monkeypatch):
     jira_client.assert_called_once_with(
         'https://api.atlassian.com/ex/jira/cloud-id',
         token_auth='oauth-token')
+
+
+def test_jira_api_rejects_unverified_cloud_id_override(tmp_path, monkeypatch):
+    oauth_file = tmp_path / ".jira.oauth"
+    oauth_file.write_text(json.dumps({
+        'jira-auth-method': 'oauth',
+        'jira-server': 'https://jira.example.com',
+        'jira-oauth-client-id': 'oauth-client-id',
+        'jira-oauth-client-secret': 'oauth-client-secret',
+        'jira-cloud-id': 'cloud-id',
+    }))
+
+    token_response = Mock()
+    token_response.json = Mock(return_value={
+        'access_token': 'oauth-token',
+        'expires_in': 3600,
+    })
+    token_response.raise_for_status = Mock()
+    resources_response = Mock()
+    resources_response.json = Mock(return_value=[{
+        'url': 'https://other.example.com',
+        'id': 'cloud-id',
+    }])
+    resources_response.raise_for_status = Mock()
+
+    monkeypatch.setattr(
+        jira_api_module.requests, 'post', Mock(return_value=token_response))
+    monkeypatch.setattr(
+        jira_api_module.requests, 'get', Mock(return_value=resources_response))
+    monkeypatch.delenv('SNAP_USER_COMMON', raising=False)
+
+    api = jira_api_module.jira_api(
+        credstore=str(tmp_path / ".jira.token"),
+        oauth_credstore=str(oauth_file))
+
+    with pytest.raises(ValueError, match='Unable to verify configured Jira cloud ID'):
+        api.create_client()

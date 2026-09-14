@@ -220,6 +220,11 @@ class jira_api():
                 'Configured Jira cloud ID does not match {}'.format(
                     self.server))
 
+        if self.cloud_id and self.server and not discovered_cloud_id:
+            raise ValueError(
+                'Unable to verify configured Jira cloud ID for {}'.format(
+                    self.server))
+
         if self.cloud_id:
             return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, self.cloud_id)
 
