@@ -440,6 +440,9 @@ def _make_mock_infra():
     mock_jira_api.server = "https://jira.example.com"
     mock_jira_api.login = "user"
     mock_jira_api.token = "token"
+    mock_jira_api.get_jira_client_kwargs.return_value = {
+        "basic_auth": (mock_jira_api.login, mock_jira_api.token)
+    }
     return mock_lp, mock_jira, mock_jira_api
 
 

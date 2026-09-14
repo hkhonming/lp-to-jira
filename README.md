@@ -5,9 +5,47 @@ Python helper script that create a new JIRA bug entry from an existing Launchpad
 lp-to-jira will access [Launchpad](https://launchpad.net/) as an anonymous user for now so private bug might not be visible.
 
 ## JIRA
-A JIRA account is required You will need to setup a JIRA token to access your server.
+A JIRA account is required.
+
+### Token authentication (default)
+By default, lp-to-jira keeps the existing token-based flow and reads credentials from `~/.jira.token` (or `$SNAP_USER_COMMON/.jira.token` when running in snap):
+
+```json
+{
+  "jira-server": "https://your-domain.atlassian.net",
+  "jira-login": "user@example.com",
+  "jira-token": "your-api-token"
+}
+```
 
 On the first launch lp-to-jira will assist you in getting your jira API token. JIRA API token can be created here: https://id.atlassian.com/manage-profile/security/api-tokens.
+
+### OAuth authentication
+Set `JIRA_AUTH_METHOD=oauth` to switch to the jira library's native OAuth mode. OAuth credentials can be supplied either through environment variables or a separate `~/.jira.oauth` file (or `$SNAP_USER_COMMON/.jira.oauth` in snap environments).
+
+Supported environment variables:
+
+- `JIRA_AUTH_METHOD=oauth`
+- `JIRA_OAUTH_SERVER` (or `JIRA_SERVER`)
+- `JIRA_OAUTH_CONSUMER_KEY` (alias: `JIRA_OAUTH_CLIENT_ID`)
+- `JIRA_OAUTH_KEY_CERT` (alias: `JIRA_OAUTH_PRIVATE_KEY`)
+- `JIRA_OAUTH_ACCESS_TOKEN` (alias: `JIRA_OAUTH_TOKEN`)
+- `JIRA_OAUTH_ACCESS_TOKEN_SECRET` (alias: `JIRA_OAUTH_TOKEN_SECRET`)
+- `JIRA_OAUTH_SIGNATURE_METHOD` (optional)
+
+Example `~/.jira.oauth` file:
+
+```json
+{
+  "jira-server": "https://your-jira.example.com",
+  "consumer_key": "your-consumer-key",
+  "key_cert": "your-private-key",
+  "access_token": "your-access-token",
+  "access_token_secret": "your-access-token-secret"
+}
+```
+
+If `JIRA_AUTH_METHOD` is not set, lp-to-jira continues to use token authentication for backward compatibility.
 
 ## Usage:
 ```
