@@ -121,3 +121,43 @@ def test_jira_api_supports_env_only_oauth_configuration(tmp_path, monkeypatch):
     jira_client.assert_called_once_with(
         'https://api.atlassian.com/ex/jira/env-cloud-id',
         token_auth='oauth-token-from-env')
+
+
+def test_jira_api_caches_oauth_access_data(tmp_path, monkeypatch):
+    oauth_file = tmp_path / ".jira.oauth"
+    oauth_file.write_text(json.dumps({
+        'jira-auth-method': 'oauth',
+        'jira-server': 'https://jira.example.com',
+        'jira-oauth-client-id': 'oauth-client-id',
+        'jira-oauth-client-secret': 'oauth-client-secret',
+    }))
+
+    token_response = Mock()
+    token_response.json = Mock(return_value={
+        'access_token': 'cached-oauth-token',
+        'expires_in': 3600,
+    })
+    token_response.raise_for_status = Mock()
+    resources_response = Mock()
+    resources_response.json = Mock(return_value=[{
+        'url': 'https://jira.example.com',
+        'id': 'cloud-id',
+    }])
+    resources_response.raise_for_status = Mock()
+
+    jira_client = Mock(return_value='jira-client')
+    post = Mock(return_value=token_response)
+    get = Mock(return_value=resources_response)
+    monkeypatch.setattr(jira_api_module.requests, 'post', post)
+    monkeypatch.setattr(jira_api_module.requests, 'get', get)
+    monkeypatch.setattr(jira_api_module, 'JIRA', jira_client)
+    monkeypatch.delenv('SNAP_USER_COMMON', raising=False)
+
+    api = jira_api_module.jira_api(
+        credstore=str(tmp_path / ".jira.token"),
+        oauth_credstore=str(oauth_file))
+
+    assert api.create_client() == 'jira-client'
+    assert api.create_client() == 'jira-client'
+    assert post.call_count == 1
+    assert get.call_count == 1

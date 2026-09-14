@@ -5,6 +5,7 @@
 import os
 import json
 import getpass
+import time
 
 from jira import JIRA
 import requests
@@ -41,6 +42,7 @@ class jira_api():
         self.client_secret = None
         self.cloud_id = None
         self.token_url = 'https://auth.atlassian.com/oauth/token'
+        self.oauth_access_data = None
 
         if self.auth_method == 'token':
             self._load_token_auth()
@@ -160,6 +162,11 @@ class jira_api():
         return {'basic_auth': (self.login, self.token)}
 
     def get_oauth_access_data(self):
+        if self.oauth_access_data:
+            expires_at = self.oauth_access_data.get('expires_at', 0)
+            if expires_at > time.time():
+                return self.oauth_access_data
+
         response = requests.post(
             self.token_url,
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
@@ -175,6 +182,7 @@ class jira_api():
         token = payload.get('access_token')
         if not token:
             raise ValueError('No OAuth access token returned by Atlassian')
+        expires_in = payload.get('expires_in', 0)
 
         resources = requests.get(
             ATLASSIAN_ACCESSIBLE_RESOURCES_URL,
@@ -191,7 +199,12 @@ class jira_api():
             if resource.get('url') and resource.get('id')
         }
 
-        return {'token': token, 'cloud_ids': cloud_ids}
+        self.oauth_access_data = {
+            'token': token,
+            'cloud_ids': cloud_ids,
+            'expires_at': time.time() + max(0, expires_in - 60),
+        }
+        return self.oauth_access_data
 
     def get_oauth_server(self, auth):
         if self.server and self.server.startswith(ATLASSIAN_EX_JIRA_PREFIX):
