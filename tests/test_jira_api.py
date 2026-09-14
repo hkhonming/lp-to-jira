@@ -2,6 +2,8 @@ import json
 
 from unittest.mock import Mock
 
+import pytest
+
 import LpToJira.jira_api as jira_api_module
 
 
@@ -162,3 +164,40 @@ def test_jira_api_caches_oauth_access_data(tmp_path, monkeypatch):
     assert api.create_client() == 'jira-client'
     assert post.call_count == 1
     assert get.call_count == 1
+
+
+def test_jira_api_rejects_mismatched_cloud_id(tmp_path, monkeypatch):
+    oauth_file = tmp_path / ".jira.oauth"
+    oauth_file.write_text(json.dumps({
+        'jira-auth-method': 'oauth',
+        'jira-server': 'https://jira.example.com',
+        'jira-oauth-client-id': 'oauth-client-id',
+        'jira-oauth-client-secret': 'oauth-client-secret',
+        'jira-cloud-id': 'different-cloud-id',
+    }))
+
+    token_response = Mock()
+    token_response.json = Mock(return_value={
+        'access_token': 'oauth-token',
+        'expires_in': 3600,
+    })
+    token_response.raise_for_status = Mock()
+    resources_response = Mock()
+    resources_response.json = Mock(return_value=[{
+        'url': 'https://jira.example.com',
+        'id': 'cloud-id',
+    }])
+    resources_response.raise_for_status = Mock()
+
+    monkeypatch.setattr(
+        jira_api_module.requests, 'post', Mock(return_value=token_response))
+    monkeypatch.setattr(
+        jira_api_module.requests, 'get', Mock(return_value=resources_response))
+    monkeypatch.delenv('SNAP_USER_COMMON', raising=False)
+
+    api = jira_api_module.jira_api(
+        credstore=str(tmp_path / ".jira.token"),
+        oauth_credstore=str(oauth_file))
+
+    with pytest.raises(ValueError, match='Configured Jira cloud ID does not match'):
+        api.create_client()

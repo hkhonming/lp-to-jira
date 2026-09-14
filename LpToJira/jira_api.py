@@ -211,15 +211,23 @@ class jira_api():
         if self.server and self.server.startswith(ATLASSIAN_EX_JIRA_PREFIX):
             return self.server
 
-        if self.cloud_id:
+        discovered_cloud_id = None
+        if self.server:
+            discovered_cloud_id = auth['cloud_ids'].get(self.server.rstrip('/'))
+
+        if self.cloud_id and discovered_cloud_id and self.cloud_id != discovered_cloud_id:
+            raise ValueError(
+                'Configured Jira cloud ID does not match {}'.format(
+                    self.server))
+
+        if self.cloud_id and not self.server:
             return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, self.cloud_id)
 
-        cloud_id = auth['cloud_ids'].get(self.server.rstrip('/'))
-        if not cloud_id:
+        if not discovered_cloud_id:
             raise ValueError(
                 'Unable to find Atlassian cloud ID for {}'.format(
                     self.server))
-        return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, cloud_id)
+        return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, discovered_cloud_id)
 
     def create_client(self):
         jira_client_kwargs = self.get_jira_client_kwargs()
