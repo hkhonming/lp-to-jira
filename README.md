@@ -22,7 +22,7 @@ OAuth 2.0 client credentials authentication is also supported. To use it, set `L
 ```json
 {
   "jira-auth-method": "oauth",
-  "jira-server": "https://api.atlassian.com/ex/jira/<cloudId>",
+  "jira-server": "https://your-domain.atlassian.net",
   "jira-oauth-client-id": "your-client-id",
   "jira-oauth-client-secret": "your-client-secret"
 }
@@ -30,11 +30,12 @@ OAuth 2.0 client credentials authentication is also supported. To use it, set `L
 
 You can also provide OAuth settings through environment variables:
 - `LP_TO_JIRA_JIRA_SERVER` or `JIRA_SERVER`
-- `LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID` or `JIRA_OAUTH_CLIENT_ID`
-- `LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET` or `JIRA_OAUTH_CLIENT_SECRET`
+- `JIRA_CLIENT_ID` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID` or `JIRA_OAUTH_CLIENT_ID`
+- `JIRA_CLIENT_SECRET` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET` or `JIRA_OAUTH_CLIENT_SECRET`
+- `JIRA_CLOUD_ID` or `LP_TO_JIRA_JIRA_CLOUD_ID` or `JIRA_OAUTH_CLOUD_ID` (optional)
 - `LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL` or `JIRA_OAUTH_TOKEN_URL` (optional, defaults to `https://auth.atlassian.com/oauth/token`)
 
-When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian and uses it for Jira API requests.
+When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian, discovers the accessible Jira cloud IDs for the service account, and uses the matching Atlassian API URL for Jira API requests.
 
 ## Usage:
 ```

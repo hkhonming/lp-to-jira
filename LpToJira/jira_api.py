@@ -9,6 +9,11 @@ import getpass
 from jira import JIRA
 import requests
 
+REQUEST_TIMEOUT = 30
+ATLASSIAN_ACCESSIBLE_RESOURCES_URL = \
+    'https://api.atlassian.com/oauth/token/accessible-resources'
+ATLASSIAN_EX_JIRA_PREFIX = 'https://api.atlassian.com/ex/jira/'
+
 class jira_api():
     def __init__(self,
                  credstore="{}/.jira.token".format(os.path.expanduser('~')),
@@ -34,6 +39,7 @@ class jira_api():
         self.token = None
         self.client_id = None
         self.client_secret = None
+        self.cloud_id = None
         self.token_url = 'https://auth.atlassian.com/oauth/token'
 
         if self.auth_method == 'token':
@@ -121,11 +127,17 @@ class jira_api():
             'LP_TO_JIRA_JIRA_SERVER',
             'JIRA_SERVER') or config.get('jira-server')
         self.client_id = self._get_env(
+            'JIRA_CLIENT_ID',
             'LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID',
             'JIRA_OAUTH_CLIENT_ID') or config.get('jira-oauth-client-id')
         self.client_secret = self._get_env(
+            'JIRA_CLIENT_SECRET',
             'LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET',
             'JIRA_OAUTH_CLIENT_SECRET') or config.get('jira-oauth-client-secret')
+        self.cloud_id = self._get_env(
+            'JIRA_CLOUD_ID',
+            'LP_TO_JIRA_JIRA_CLOUD_ID',
+            'JIRA_OAUTH_CLOUD_ID') or config.get('jira-cloud-id')
         self.token_url = self._get_env(
             'LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL',
             'JIRA_OAUTH_TOKEN_URL') or config.get(
@@ -142,12 +154,12 @@ class jira_api():
 
     def get_jira_client_kwargs(self):
         if self.auth_method == 'oauth':
-            token = self.get_oauth_access_token()
-            return {'token_auth': token}
+            auth = self.get_oauth_access_data()
+            return {'server': self.get_oauth_server(auth), 'token_auth': auth['token']}
 
         return {'basic_auth': (self.login, self.token)}
 
-    def get_oauth_access_token(self):
+    def get_oauth_access_data(self):
         response = requests.post(
             self.token_url,
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
@@ -156,14 +168,46 @@ class jira_api():
                 'client_secret': self.client_secret,
                 'grant_type': 'client_credentials',
             },
-            timeout=30,
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         payload = response.json()
         token = payload.get('access_token')
         if not token:
             raise ValueError('No OAuth access token returned by Atlassian')
-        return token
+
+        resources = requests.get(
+            ATLASSIAN_ACCESSIBLE_RESOURCES_URL,
+            headers={
+                'Authorization': ''.join(['Bearer ', token]),
+                'Accept': 'application/json',
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        resources.raise_for_status()
+        cloud_ids = {
+            resource['url'].rstrip('/'): resource['id']
+            for resource in resources.json()
+            if resource.get('url') and resource.get('id')
+        }
+
+        return {'token': token, 'cloud_ids': cloud_ids}
+
+    def get_oauth_server(self, auth):
+        if self.server and self.server.startswith(ATLASSIAN_EX_JIRA_PREFIX):
+            return self.server
+
+        if self.cloud_id:
+            return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, self.cloud_id)
+
+        cloud_id = auth['cloud_ids'].get(self.server.rstrip('/'))
+        if not cloud_id:
+            raise ValueError(
+                'Unable to find Atlassian cloud ID for {}'.format(
+                    self.server))
+        return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, cloud_id)
 
     def create_client(self):
-        return JIRA(self.server, **self.get_jira_client_kwargs())
+        jira_client_kwargs = self.get_jira_client_kwargs()
+        server = jira_client_kwargs.pop('server', self.server)
+        return JIRA(server, **jira_client_kwargs)
