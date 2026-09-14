@@ -33,13 +33,13 @@ OAuth setup requirements:
 - Ensure the Atlassian OAuth app or service account can access the target Jira site
 - lp-to-jira requests the token with the required `audience=api.atlassian.com`
 - Set `jira-server` / `JIRA_SERVER` to your Jira site URL such as `https://your-domain.atlassian.net`
+- Do not configure a cloud ID directly; lp-to-jira discovers it from Atlassian accessible resources
 - That site URL must match one of the URLs returned by Atlassian accessible resources for the service account
 
 You can also provide OAuth settings through environment variables:
 - `LP_TO_JIRA_JIRA_SERVER` or `JIRA_SERVER`
 - `JIRA_CLIENT_ID` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID` or `JIRA_OAUTH_CLIENT_ID`
 - `JIRA_CLIENT_SECRET` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET` or `JIRA_OAUTH_CLIENT_SECRET`
-- `JIRA_CLOUD_ID` or `LP_TO_JIRA_JIRA_CLOUD_ID` or `JIRA_OAUTH_CLOUD_ID` (optional)
 - `LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL` or `JIRA_OAUTH_TOKEN_URL` (optional, defaults to `https://auth.atlassian.com/oauth/token`)
 
 When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian, discovers the accessible Jira cloud IDs for the service account, and uses the matching Atlassian API URL for Jira API requests.

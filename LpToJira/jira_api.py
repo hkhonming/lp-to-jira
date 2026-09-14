@@ -41,7 +41,6 @@ class jira_api():
         self.token = None
         self.client_id = None
         self.client_secret = None
-        self.cloud_id = None
         self.token_url = 'https://auth.atlassian.com/oauth/token'
         self.oauth_access_data = None
         self.oauth_access_data_lock = threading.Lock()
@@ -138,10 +137,6 @@ class jira_api():
             'JIRA_CLIENT_SECRET',
             'LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET',
             'JIRA_OAUTH_CLIENT_SECRET') or config.get('jira-oauth-client-secret')
-        self.cloud_id = self._get_env(
-            'JIRA_CLOUD_ID',
-            'LP_TO_JIRA_JIRA_CLOUD_ID',
-            'JIRA_OAUTH_CLOUD_ID') or config.get('jira-cloud-id')
         self.token_url = self._get_env(
             'LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL',
             'JIRA_OAUTH_TOKEN_URL') or config.get(
@@ -218,29 +213,13 @@ class jira_api():
 
     def get_oauth_server(self, auth):
         if self.server and self.server.startswith(ATLASSIAN_EX_JIRA_PREFIX):
-            server_cloud_id = self.server[len(ATLASSIAN_EX_JIRA_PREFIX):].strip('/')
-            if self.cloud_id and self.cloud_id != server_cloud_id:
-                raise ValueError(
-                    'Configured Jira cloud ID does not match {}'.format(
-                        self.server))
-            return self.server
+            raise ValueError(
+                'Configure jira-server with the Jira site URL, not the '
+                'Atlassian API URL')
 
         discovered_cloud_id = None
         if self.server:
             discovered_cloud_id = auth['cloud_ids'].get(self.server.rstrip('/'))
-
-        if self.cloud_id and discovered_cloud_id and self.cloud_id != discovered_cloud_id:
-            raise ValueError(
-                'Configured Jira cloud ID does not match {}'.format(
-                    self.server))
-
-        if self.cloud_id and self.server and not discovered_cloud_id:
-            raise ValueError(
-                'Unable to verify configured Jira cloud ID for {}'.format(
-                    self.server))
-
-        if self.cloud_id:
-            return '{}{}'.format(ATLASSIAN_EX_JIRA_PREFIX, self.cloud_id)
 
         if not discovered_cloud_id:
             raise ValueError(
