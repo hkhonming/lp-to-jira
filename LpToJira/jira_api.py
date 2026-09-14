@@ -218,6 +218,11 @@ class jira_api():
 
     def get_oauth_server(self, auth):
         if self.server and self.server.startswith(ATLASSIAN_EX_JIRA_PREFIX):
+            server_cloud_id = self.server[len(ATLASSIAN_EX_JIRA_PREFIX):].strip('/')
+            if self.cloud_id and self.cloud_id != server_cloud_id:
+                raise ValueError(
+                    'Configured Jira cloud ID does not match {}'.format(
+                        self.server))
             return self.server
 
         discovered_cloud_id = None
