@@ -5,9 +5,44 @@ Python helper script that create a new JIRA bug entry from an existing Launchpad
 lp-to-jira will access [Launchpad](https://launchpad.net/) as an anonymous user for now so private bug might not be visible.
 
 ## JIRA
-A JIRA account is required You will need to setup a JIRA token to access your server.
+A JIRA account is required. You will need to set up a JIRA token to access your server.
 
 On the first launch lp-to-jira will assist you in getting your jira API token. JIRA API token can be created here: https://id.atlassian.com/manage-profile/security/api-tokens.
+
+Token-based authentication remains the default and continues to use `~/.jira.token` (or `$SNAP_USER_COMMON/.jira.token`) with:
+```json
+{
+  "jira-server": "https://your-domain.atlassian.net",
+  "jira-login": "user@example.com",
+  "jira-token": "your-api-token"
+}
+```
+
+OAuth 2.0 client credentials authentication is also supported. To use it, set `LP_TO_JIRA_JIRA_AUTH_METHOD=oauth` (or `JIRA_AUTH_METHOD=oauth`) or save `jira-auth-method` as `oauth` in `~/.jira.oauth` (or `$SNAP_USER_COMMON/.jira.oauth`):
+```json
+{
+  "jira-auth-method": "oauth",
+  "jira-server": "https://your-domain.atlassian.net",
+  "jira-oauth-client-id": "your-client-id",
+  "jira-oauth-client-secret": "your-client-secret"
+}
+```
+
+OAuth setup requirements:
+- Create the OAuth client in the Atlassian developer console for client-credentials access to `api.atlassian.com`
+- Ensure the Atlassian OAuth app or service account can access the target Jira site
+- lp-to-jira requests the token with the required `audience=api.atlassian.com`
+- Set `jira-server` / `JIRA_SERVER` to your Jira site URL such as `https://your-domain.atlassian.net`
+- Do not configure a cloud ID directly; lp-to-jira discovers it from Atlassian accessible resources
+- That site URL must match one of the URLs returned by Atlassian accessible resources for the service account
+
+You can also provide OAuth settings through environment variables:
+- `LP_TO_JIRA_JIRA_SERVER` or `JIRA_SERVER`
+- `JIRA_CLIENT_ID` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_ID` or `JIRA_OAUTH_CLIENT_ID`
+- `JIRA_CLIENT_SECRET` or `LP_TO_JIRA_JIRA_OAUTH_CLIENT_SECRET` or `JIRA_OAUTH_CLIENT_SECRET`
+- `LP_TO_JIRA_JIRA_OAUTH_TOKEN_URL` or `JIRA_OAUTH_TOKEN_URL` (optional, defaults to `https://auth.atlassian.com/oauth/token`)
+
+When OAuth is enabled, lp-to-jira requests a short-lived access token from Atlassian, discovers the accessible Jira cloud IDs for the service account, and uses the matching Atlassian API URL for Jira API requests.
 
 ## Usage:
 ```
