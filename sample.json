@@ -2,6 +2,7 @@
   "sync_milestone": false,
   "sync_unmapped_users": false,
   "sync_only_existing": false,
+  "add_link_in_lp_desc": false,
   "status_map":
   {
     "New": "To Do",
