@@ -413,6 +413,11 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
         return
 
+    # When sync_only_existing is enabled, we only update issues that already
+    # exist in JIRA and never create new ones for bugs not yet imported.
+    if getattr(opts, "sync_only_existing", False):
+        return
+
     sync_to_jira = False
 
     if len(assignees) == 0:
@@ -623,6 +628,7 @@ def main(args=None):
     opts.priority_map = {}
     opts.sync_project = []
     opts.sync_unmapped_users = False
+    opts.sync_only_existing = False
 
     if opts.config:
         json_config = json.load(opts.config)
@@ -633,6 +639,7 @@ def main(args=None):
         if "sync_milestone" in json_config:
             opts.sync_milestone = json_config["sync_milestone"]
         opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
+        opts.sync_only_existing = json_config.get("sync_only_existing", False)
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)
