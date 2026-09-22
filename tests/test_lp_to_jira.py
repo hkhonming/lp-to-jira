@@ -401,6 +401,7 @@ def test_lp_to_jira_bug_duplicate_sets_rejected(lp, empty_bug):
     opts.priority_map = {}
     opts.dry_run = False
     opts.sync_unmapped_users = False
+    opts.sync_only_existing = False
     opts.sync_milestone = False
     opts.debug = False
     opts.label = ""
@@ -417,7 +418,76 @@ def test_lp_to_jira_bug_duplicate_sets_rejected(lp, empty_bug):
     assert "duplicate" in jira.add_comment.call_args[0][1].lower()
 
 
-def test_lp_to_jira_existing_duplicate_sets_rejected(lp, empty_bug):
+def test_lp_to_jira_bug_sync_only_existing_skips_creation(lp, empty_bug):
+    """When sync_only_existing is True, a bug not in JIRA must not be created."""
+    sync = {'jira_project': 'AA'}
+    jira = Mock()
+    # No existing JIRA issue for this bug
+    jira.search_issues = Mock(return_value=None)
+    jira.client_info = Mock(return_value="jira")
+    jira.create_issue = Mock(return_value=Mock(key="KEY-123", id="123"))
+    jira.add_simple_link = Mock(return_value=None)
+
+    empty_bug.id = 123456
+
+    opts = Mock()
+    opts.user_map = {}
+    opts.status_map = {}
+    opts.priority_map = {}
+    opts.dry_run = False
+    opts.sync_unmapped_users = False
+    opts.sync_only_existing = True
+    opts.sync_milestone = False
+    opts.debug = False
+    opts.label = ""
+    opts.lp_link = False
+    opts.no_lp_tag = True
+    opts.epic = None
+
+    lp_to_jira_bug(lp, jira, empty_bug, sync, opts)
+
+    jira.create_issue.assert_not_called()
+
+
+def test_lp_to_jira_bug_sync_only_existing_updates_existing(lp, empty_bug):
+    """When sync_only_existing is True, an existing JIRA issue is still updated."""
+    sync = {'jira_project': 'AA'}
+    jira = Mock()
+
+    existing_issue = Mock()
+    existing_issue.key = "AA-1"
+    existing_issue.fields = Mock()
+    existing_issue.fields.status = Mock()
+    existing_issue.fields.status.name = "In Progress"
+    existing_issue.fields.assignee = None
+    existing_issue.fields.priority = None
+    jira.search_issues = Mock(return_value=[existing_issue])
+    jira.client_info = Mock(return_value="jira")
+    jira.create_issue = Mock(return_value=Mock(key="KEY-123", id="123"))
+
+    empty_bug.id = 123456
+    empty_bug.duplicate_of = None
+
+    opts = Mock()
+    opts.user_map = {}
+    opts.status_map = {}
+    opts.priority_map = {}
+    opts.dry_run = False
+    opts.sync_unmapped_users = False
+    opts.sync_only_existing = True
+    opts.sync_milestone = False
+    opts.debug = False
+    opts.label = ""
+    opts.lp_link = False
+    opts.no_lp_tag = True
+    opts.epic = None
+
+    lp_to_jira_bug(lp, jira, empty_bug, sync, opts)
+
+    # Existing issue is processed, but no new issue is created
+    jira.create_issue.assert_not_called()
+
+
     sync = {'jira_project': 'AA'}
     jira = Mock()
     jira.client_info = Mock(return_value="jira")
@@ -444,6 +514,7 @@ def test_lp_to_jira_existing_duplicate_sets_rejected(lp, empty_bug):
     opts.priority_map = {}
     opts.dry_run = False
     opts.sync_unmapped_users = False
+    opts.sync_only_existing = False
     opts.sync_milestone = False
     opts.debug = False
     opts.label = ""

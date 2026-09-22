@@ -286,6 +286,7 @@ def test_lp_to_jira_bug_milestone_disabled_by_default():
     opts.user_map = {}
     opts.status_map = {}
     opts.priority_map = {}
+    opts.sync_only_existing = False
     opts.epic = None
     
     sync = {'jira_project': 'TEST'}
@@ -343,6 +344,7 @@ def test_lp_to_jira_bug_milestone_enabled():
     opts.user_map = {}
     opts.status_map = {}
     opts.priority_map = {}
+    opts.sync_only_existing = False
     opts.epic = None
     
     sync = {'jira_project': 'TEST'}

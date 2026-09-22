@@ -1,6 +1,7 @@
 {
   "sync_milestone": false,
   "sync_unmapped_users": false,
+  "sync_only_existing": false,
   "status_map":
   {
     "New": "To Do",
