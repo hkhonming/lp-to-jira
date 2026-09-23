@@ -553,6 +553,7 @@ def main(args=None):
         '--add-link-in-lp-desc',
         dest='lp_link',
         action='store_true',
+        default=None,
         help='Add JIRA link in LP Bug description'
     )
     opt_parser.add_argument(
@@ -640,6 +641,10 @@ def main(args=None):
             opts.sync_milestone = json_config["sync_milestone"]
         opts.sync_unmapped_users = json_config.get("sync_unmapped_users", False)
         opts.sync_only_existing = json_config.get("sync_only_existing", False)
+        # CLI argument takes priority over config; only fall back to config
+        # when --add-link-in-lp-desc was not specified on the command line
+        if opts.lp_link is None and "add_link_in_lp_desc" in json_config:
+            opts.lp_link = json_config["add_link_in_lp_desc"]
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)

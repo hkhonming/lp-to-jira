@@ -40,7 +40,10 @@ optional arguments:
                         prepend a '-', e.g. '-unwantedtag'
   --no-lp-tag           Do not add tag to LP Bug
   --add-link-in-lp-desc
-                        Add JIRA link in LP Bug description
+                        Add JIRA link in LP Bug description. This can also be
+                        set via the "add_link_in_lp_desc" key in the JSON
+                        configuration file. The command-line argument takes
+                        priority over the config file value.
 
 Examples:
     lp-to-jira 3215487 FR
