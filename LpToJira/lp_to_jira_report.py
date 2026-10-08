@@ -597,7 +597,7 @@ def main(args=None):
     # 1. Initialize JIRA API
     api = jira_api()
     jira_server = api.server
-    jira = JIRA(api.server, basic_auth=(api.login, api.token))
+    jira = JIRA(api.server, **api.get_jira_client_kwargs())
 
     # TODO: catch exception if the Launchpad API isn't open
     # 2. Initialize Launchpad API
