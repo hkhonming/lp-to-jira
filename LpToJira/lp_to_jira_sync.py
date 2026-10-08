@@ -10,7 +10,6 @@ import datetime
 from optparse import OptionParser
 
 from launchpadlib.launchpad import Launchpad
-from jira import JIRA
 from LpToJira.jira_api import jira_api
 
 
@@ -92,7 +91,7 @@ Examples:
     print("Initialize JIRA API ...")
     api = jira_api()
     jira_server = api.server
-    jira = JIRA(api.server, basic_auth=(api.login, api.token))
+    jira = api.create_client()
 
     # TODO: catch exception if the Launchpad API isn't open
     # 2. Initialize Launchpad API
@@ -132,4 +131,3 @@ Examples:
     return 0
 
 main()
-
