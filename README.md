@@ -11,7 +11,7 @@ On the first launch lp-to-jira will assist you in getting your jira API token. J
 
 ## Usage:
 ```
-usage: lp-to-jira [-h] [-l LABEL] [-c COMPONENT] [-E EPIC] [-e] [-s SYNC_PROJECT_BUGS] [-d DAYS] [-t TAGS] [--add-link-in-lp-desc ] [--no-lp-tag] [bug] project
+usage: lp-to-jira [-h] [-l LABEL] [-c COMPONENT] [-E EPIC] [-e] [-s SYNC_PROJECT_BUGS] [-d DAYS] [-t TAGS] [--add-link-in-lp-desc ] [--sync-comments] [--no-lp-tag] [bug] project
 
 A script create JIRA issue from Launchpad bugs
 
@@ -44,6 +44,13 @@ optional arguments:
                         set via the "add_link_in_lp_desc" key in the JSON
                         configuration file. The command-line argument takes
                         priority over the config file value.
+  --sync-comments       Sync all Launchpad bug comments to the JIRA issue as
+                        JIRA comments. Already synced comments are skipped, so
+                        it is safe to run repeatedly. The bug description
+                        (first LP message) is not duplicated. This can also be
+                        set via the "sync_comments" key in the JSON
+                        configuration file. The command-line argument takes
+                        priority over the config file value.
 
 Examples:
     lp-to-jira 3215487 FR
@@ -54,6 +61,7 @@ Examples:
     lp-to-jira -s ubuntu -t go-to-jira PR
     lp-to-jira -s ubuntu -t go-to-jira -t also-to-jira PR
     lp-to-jira -s ubuntu -t=-ignore-these PR
+    lp-to-jira --sync-comments 3215487 FR
 
 ```
 

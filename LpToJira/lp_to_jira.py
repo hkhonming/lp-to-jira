@@ -396,6 +396,75 @@ def sync_duplicate_to_jira(jira, bug, jira_issue, dry_run=False):
     return True
 
 
+# JIRA rejects comments longer than 32767 characters, keep some margin for
+# the header added around the Launchpad comment content
+JIRA_COMMENT_MAX_CONTENT = 30000
+
+
+def get_lp_comment_marker(bug, index):
+    """Return the marker used to identify a synced Launchpad comment in JIRA"""
+    return "LP#{} comment #{}".format(bug.id, index)
+
+
+def build_jira_comment_from_lp(bug, message, index):
+    """Build the body of a JIRA comment from a Launchpad bug message"""
+    try:
+        author = message.owner.display_name
+    except Exception:
+        author = "Unknown"
+
+    date = getattr(message, "date_created", None)
+    date = date.strftime("%Y-%m-%d %H:%M:%S UTC") if date else "unknown date"
+
+    content = message.content or ""
+    if len(content) > JIRA_COMMENT_MAX_CONTENT:
+        content = content[:JIRA_COMMENT_MAX_CONTENT] + "\n[... truncated ...]"
+    # Prevent the content from closing the noformat block early
+    content = content.replace("{noformat}", "{ noformat}")
+
+    link = "{}/comments/{}".format(bug.web_link, index)
+
+    return "[{}|{}] by *{}* on {}:\n{{noformat}}\n{}\n{{noformat}}".format(
+        get_lp_comment_marker(bug, index), link, author, date, content)
+
+
+def sync_comments_to_jira(jira, bug, issue, dry_run=False):
+    """
+    Synchronize all Launchpad bug comments to the JIRA issue.
+    The first Launchpad message is the bug description and is skipped.
+    Comments already present in JIRA (identified by their marker) are not
+    added again, so this function can be run repeatedly.
+    Returns the number of comments added (or that would be added in dry-run).
+    """
+    messages = list(bug.messages)[1:]
+    if not messages:
+        return 0
+
+    existing_bodies = []
+    if issue is not None:
+        existing_bodies = [c.body for c in jira.comments(issue)]
+
+    added = 0
+    for index, message in enumerate(messages, start=1):
+        marker = "[{}|".format(get_lp_comment_marker(bug, index))
+        if any(marker in body for body in existing_bodies):
+            continue
+
+        if dry_run:
+            print("(dry-run) Would sync LP#{} comment #{} to JIRA".format(
+                bug.id, index))
+        else:
+            jira.add_comment(
+                issue, build_jira_comment_from_lp(bug, message, index))
+        added += 1
+
+    if added and not dry_run:
+        print("Synced {} comment(s) from LP#{} to {}".format(
+            added, bug.id, issue.key))
+
+    return added
+
+
 def lp_to_jira_bug(lp, jira, bug, sync, opts):
     """Create JIRA issue at project_id for a given Launchpad bug"""
 
@@ -411,6 +480,8 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         # Sync milestone to JIRA version if enabled
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, issue, project_id, opts.dry_run, opts.debug)
+        if getattr(opts, "sync_comments", False) is True:
+            sync_comments_to_jira(jira, bug, issue, opts.dry_run)
         return
 
     # When sync_only_existing is enabled, we only update issues that already
@@ -451,6 +522,9 @@ def lp_to_jira_bug(lp, jira, bug, sync, opts):
         if opts.sync_milestone:
             sync_milestone_to_jira(jira, bug, jira_issue, project_id, opts.dry_run, opts.debug)
 
+    if getattr(opts, "sync_comments", False) is True:
+        sync_comments_to_jira(jira, bug, jira_issue, opts.dry_run)
+
     sync_duplicate_to_jira(jira, bug, jira_issue, opts.dry_run)
 
     if opts.lp_link:
@@ -484,6 +558,7 @@ def main(args=None):
             lp-to-jira -s ubuntu -t go-to-jira -t also-to-jira PR
             lp-to-jira -s ubuntu -t=-ignore-these PR
             lp-to-jira --sync-milestone 3215487 FR
+            lp-to-jira --sync-comments 3215487 FR
         ''')
     )
     opt_parser.add_argument(
@@ -588,6 +663,13 @@ def main(args=None):
         help='Sync Launchpad milestones to JIRA fix versions'
     )
     opt_parser.add_argument(
+        '--sync-comments',
+        dest='sync_comments',
+        action='store_true',
+        default=None,
+        help='Sync all Launchpad bug comments to JIRA issue comments'
+    )
+    opt_parser.add_argument(
         '--debug',
         dest='debug',
         action='store_true',
@@ -645,6 +727,8 @@ def main(args=None):
         # when --add-link-in-lp-desc was not specified on the command line
         if opts.lp_link is None and "add_link_in_lp_desc" in json_config:
             opts.lp_link = json_config["add_link_in_lp_desc"]
+        if opts.sync_comments is None and "sync_comments" in json_config:
+            opts.sync_comments = json_config["sync_comments"]
     elif opts.sync_project_bugs:
         sync_project = {"launchpad_project": opts.sync_project_bugs, "jira_project": opts.project, "assignees": None}
         opts.sync_project.append(sync_project)
